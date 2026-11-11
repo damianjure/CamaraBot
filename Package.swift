@@ -11,14 +11,20 @@ let package = Package(
         // The ATEM and PTZ engine, shared with CueScreens and CueStack.
         .library(name: "CueATEM", targets: ["CueATEM"]),
     ],
+    dependencies: [
+        // Shared Cue family code: design tokens and the NDI bridge.
+        .package(url: "https://github.com/Churchfront/CueKit.git", from: "0.1.1"),
+    ],
     targets: [
         .target(name: "CueATEM", path: "Sources/CueATEM"),
-        // NDI in by loading the runtime at run time (no SDK needed to build).
-        .target(name: "NDIBridge", path: "Sources/NDIBridge"),
         .executableTarget(name: "CueVideoMCP", path: "Sources/CueVideoMCP"),
         .executableTarget(
             name: "CueVideo",
-            dependencies: ["CueATEM", "NDIBridge"],
+            dependencies: [
+                "CueATEM",
+                .product(name: "CueDesign", package: "CueKit"),
+                .product(name: "CueNDI", package: "CueKit"),
+            ],
             path: "Sources/CueVideo"
         ),
     ]

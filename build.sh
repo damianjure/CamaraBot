@@ -10,7 +10,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/CueVideo"
 cp "$(dirname "$BIN")/cuevideo-mcp" "$APP/Contents/MacOS/cuevideo-mcp"
-cp Resources/Figtree-VariableFont_wght.ttf "$APP/Contents/Resources/"
+# Figtree and the colours come from CueKit's resource bundle.
+cp -R "$(dirname "$BIN")/CueKit_CueDesign.bundle" "$APP/Contents/Resources/"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

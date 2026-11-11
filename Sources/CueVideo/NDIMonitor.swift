@@ -1,6 +1,6 @@
 import AppKit
 import CoreVideo
-import NDIBridge
+import CueNDI
 import SwiftUI
 
 /// The preview monitor: any NDI source, usually the ATEM's multiview.

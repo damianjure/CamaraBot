@@ -1,6 +1,6 @@
 import SwiftUI
 import CoreGraphics
-import NDIBridge
+import CueNDI
 
 /// A small live picture from an NDI source, such as CueScreens' graphics or its lower thirds.
 /// It asks the sender for NDI's low-bandwidth preview stream (about 640 wide), so watching it

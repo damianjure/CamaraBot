@@ -1,41 +1,41 @@
 import SwiftUI
 import AppKit
 import CoreText
+import CueDesign
+import CueNDI
 
-/// Churchfront Signal tokens, dark (Midnight) theme, as in the other Cue apps.
+/// Churchfront Signal tokens, from CueKit's CueDesign so every Cue app matches.
+/// These short names stay so the views read as before.
 enum T {
-    static func hex(_ v: UInt32) -> Color {
-        Color(.sRGB, red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255, opacity: 1)
-    }
-    static let bg = hex(0x121212)
-    static let surface = hex(0x1C1C1C)
-    static let surfaceRaised = hex(0x2E2E2E)
-    static let surfaceSunken = hex(0x0A0A0A)
-    static let line = hex(0x333333)
-    static let lineStrong = hex(0x6B6B6B)
-    static let ink = hex(0xE6E7E8)
-    static let inkMuted = hex(0xABABAB)
-    static let inkSubtle = hex(0x8A8A8A)
-    static let accent = hex(0xCAE7F9)
-    static let accentStrong = hex(0x7CC2EE)
-    static let onAction = hex(0x121212)
-    static let success = hex(0x4FD8C4)
-    static let warning = hex(0xF2B84B)
-    static let danger = hex(0xFF6B5E)
+    static func hex(_ v: UInt32) -> Color { CueColor.solid(v) }
+    static let bg = CueColor.bg
+    static let surface = CueColor.surface
+    static let surfaceRaised = CueColor.surfaceRaised
+    static let surfaceSunken = CueColor.surfaceSunken
+    static let line = CueColor.line
+    static let lineStrong = CueColor.lineStrong
+    static let ink = CueColor.ink
+    static let inkMuted = CueColor.inkMuted
+    static let inkSubtle = CueColor.inkSubtle
+    static let accent = CueColor.accent
+    static let accentStrong = CueColor.accentStrong
+    static let onAction = CueColor.onAction
+    static let success = CueColor.success
+    static let warning = CueColor.warning
+    static let danger = CueColor.danger
     /// Tally: program red, preview green, as on every switcher panel.
-    static let program = hex(0xEF4136)
-    static let preview = hex(0x6CCB6A)
+    static let program = CueColor.tallyProgram
+    static let preview = CueColor.tallyPreview
 
-    static let s1: CGFloat = 4, s2: CGFloat = 8, s3: CGFloat = 12, s4: CGFloat = 16, s5: CGFloat = 20, s6: CGFloat = 24
-    static let rSM: CGFloat = 4, rMD: CGFloat = 6, rLG: CGFloat = 10
+    static let s1 = CueSpace.s1, s2 = CueSpace.s2, s3 = CueSpace.s3, s4 = CueSpace.s4, s5 = CueSpace.s5, s6 = CueSpace.s6
+    static let rSM = CueSpace.rSM, rMD = CueSpace.rMD, rLG = CueSpace.rLG
 }
 
 enum Fonts {
-    static var figtreeLoaded = false
+    static var figtreeLoaded: Bool { CueFont.figtreeLoaded }
     static func register() {
-        guard let url = Bundle.main.url(forResource: "Figtree-VariableFont_wght", withExtension: "ttf") else { return }
-        var err: Unmanaged<CFError>?
-        figtreeLoaded = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &err) || NSFont(name: "Figtree", size: 12) != nil
+        CueFont.register()
+        ndi_set_app_name("CueVideo")
     }
 }
 
