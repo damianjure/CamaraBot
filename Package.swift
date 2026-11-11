@@ -13,7 +13,7 @@ let package = Package(
     ],
     dependencies: [
         // Shared Cue family code: design tokens and the NDI bridge.
-        .package(url: "https://github.com/Churchfront/CueKit.git", from: "0.1.1"),
+        .package(url: "https://github.com/Churchfront/CueKit.git", from: "0.2.0"),
     ],
     targets: [
         .target(name: "CueATEM", path: "Sources/CueATEM"),

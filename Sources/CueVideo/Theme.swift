@@ -7,34 +7,34 @@ import CueNDI
 /// Churchfront Signal tokens, from CueKit's CueDesign so every Cue app matches.
 /// These short names stay so the views read as before.
 enum T {
-    static func hex(_ v: UInt32) -> Color { CueColor.solid(v) }
-    static let bg = CueColor.bg
-    static let surface = CueColor.surface
-    static let surfaceRaised = CueColor.surfaceRaised
-    static let surfaceSunken = CueColor.surfaceSunken
-    static let line = CueColor.line
-    static let lineStrong = CueColor.lineStrong
-    static let ink = CueColor.ink
-    static let inkMuted = CueColor.inkMuted
-    static let inkSubtle = CueColor.inkSubtle
-    static let accent = CueColor.accent
-    static let accentStrong = CueColor.accentStrong
-    static let onAction = CueColor.onAction
-    static let success = CueColor.success
-    static let warning = CueColor.warning
-    static let danger = CueColor.danger
+    static func hex(_ v: UInt32) -> Color { SignalColor.solid(v) }
+    static let bg = SignalColor.bg
+    static let surface = SignalColor.surface
+    static let surfaceRaised = SignalColor.surfaceRaised
+    static let surfaceSunken = SignalColor.surfaceSunken
+    static let line = SignalColor.line
+    static let lineStrong = SignalColor.lineStrong
+    static let ink = SignalColor.ink
+    static let inkMuted = SignalColor.inkMuted
+    static let inkSubtle = SignalColor.inkSubtle
+    static let accent = SignalColor.accent
+    static let accentStrong = SignalColor.accentStrong
+    static let onAction = SignalColor.onAction
+    static let success = SignalColor.success
+    static let warning = SignalColor.warning
+    static let danger = SignalColor.danger
     /// Tally: program red, preview green, as on every switcher panel.
-    static let program = CueColor.tallyProgram
-    static let preview = CueColor.tallyPreview
+    static let program = SignalColor.tallyProgram
+    static let preview = SignalColor.tallyPreview
 
-    static let s1 = CueSpace.s1, s2 = CueSpace.s2, s3 = CueSpace.s3, s4 = CueSpace.s4, s5 = CueSpace.s5, s6 = CueSpace.s6
-    static let rSM = CueSpace.rSM, rMD = CueSpace.rMD, rLG = CueSpace.rLG
+    static let s1 = SignalSpace.s1, s2 = SignalSpace.s2, s3 = SignalSpace.s3, s4 = SignalSpace.s4, s5 = SignalSpace.s5, s6 = SignalSpace.s6
+    static let rSM = SignalSpace.rSM, rMD = SignalSpace.rMD, rLG = SignalSpace.rLG
 }
 
 enum Fonts {
-    static var figtreeLoaded: Bool { CueFont.figtreeLoaded }
+    static var figtreeLoaded: Bool { SignalFont.figtreeLoaded }
     static func register() {
-        CueFont.register()
+        SignalFont.register()
         ndi_set_app_name("CueVideo")
     }
 }
