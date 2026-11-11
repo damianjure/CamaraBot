@@ -66,4 +66,3 @@ Status of CueVideo when it moved from Jake's MacBook Pro to the church booth.
 ## Next after this
 - Use `CueATEM` in CueScreens for ATEM actions on slides (its own branch; CueScreens is Matt's repo).
 - Move CueStack's send-only ATEM code onto `CueATEM`.
-- App icon.
