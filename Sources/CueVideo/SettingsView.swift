@@ -28,7 +28,7 @@ struct SwitcherWindow: View {
 
 /// The parts of Setup, as tabs across the top of the page.
 enum SetupPage: String, CaseIterable, Identifiable {
-    case switcher, sources, keys, cameras, tracking, file
+    case switcher, sources, keys, cameras, tracking, file, control
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -38,6 +38,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .cameras: return "Cameras"
         case .tracking: return "Tracking"
         case .file: return "Setup file"
+        case .control: return "Control"
         }
     }
     var purpose: String {
@@ -48,6 +49,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
         case .tracking: return "How auto tracking follows a person."
         case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
+        case .control: return "The control key Companion and Claude use, and whether other computers may use it."
         }
     }
     var help: String? {
@@ -58,6 +60,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
         case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
         case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; CueVideo picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
+        case .control: return "Companion and Claude's CueVideo connector control CueVideo through its control server. Every request has to include the control key, from this Mac or the network. Network control is kept on this Mac only, not in the setup file, so nothing that edits the file can turn it on."
         }
     }
 }
@@ -83,6 +86,7 @@ struct SetupTab: View {
             case .cameras: cameras
             case .tracking: tracking
             case .file: configFile
+            case .control: ControlSection()
             }
         }
         .onAppear { host = store.config.atemHost }
@@ -245,7 +249,7 @@ struct SetupTab: View {
                 ForEach($ptz.cameras) { $c in
                     VStack(alignment: .leading, spacing: T.s2) {
                         CameraRow(camera: $c) { ptz.cameras.removeAll { $0.id == c.id } }
-                        if ptz.canSaveShots(c) { ShotEditor(camera: $c).padding(.leading, 18) }
+                        ShotEditor(camera: $c).padding(.leading, 18)
                     }
                     if c.id != ptz.cameras.last?.id { Rectangle().fill(T.line).frame(height: 1) }
                 }
@@ -312,6 +316,46 @@ struct SetupTab: View {
             }
         }
         .frame(maxWidth: 760, alignment: .leading)
+    }
+}
+
+/// The control key, and whether other computers may use it. Companion, Claude's CueVideo
+/// connector and other software control CueVideo through ControlServer.
+struct ControlSection: View {
+    @ObservedObject var server = ControlServer.shared
+    @State private var showKey = false
+    @State private var addresses: [String] = []
+
+    var body: some View {
+        Card(title: "Control from Companion and other software") {
+            Text("Companion and Claude's CueVideo connector control CueVideo through port \(String(ControlServer.port)). Every request has to include this control key, or CueVideo turns it away.")
+                .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: T.s2) {
+                Text("Control key").font(.sans(12, .semibold)).frame(width: 90, alignment: .leading)
+                Text(showKey ? server.token : String(repeating: "•", count: 16))
+                    .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                Spacer()
+                Button(showKey ? "Hide" : "Show") { showKey.toggle() }.buttonStyle(CueButton())
+                Button("Copy key") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(server.token, forType: .string)
+                }
+                .buttonStyle(CueButton())
+            }
+            Toggle("Allow control from other computers on the network", isOn: Binding(get: { server.onNetwork }, set: { server.setOnNetwork($0) }))
+                .font(.sans(13))
+            Text(server.onNetwork
+                 ? "On: Companion on another computer can control CueVideo if it has the key. In Companion, use \(addresses.isEmpty ? "this Mac's address" : addresses.joined(separator: " or ")), port \(String(ControlServer.port)). If macOS asks whether CueVideo may accept incoming connections, choose Allow."
+                 : "Off: only software on this Mac can control CueVideo. Turn this on when Companion runs on a different computer.")
+                .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
+            if !server.running {
+                Text("The control server isn't running right now. Another copy of CueVideo may be using port \(String(ControlServer.port)).")
+                    .font(.sans(12, .semibold)).foregroundStyle(T.warning)
+            }
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+        .onAppear { addresses = ControlServer.networkAddresses() }
+        .onChange(of: server.onNetwork) { _, _ in addresses = ControlServer.networkAddresses() }
     }
 }
 
@@ -408,7 +452,9 @@ struct ShotEditor: View {
                         Text(s.kind == .exposure ? "Exposure" : "Position").font(.sans(11, .semibold))
                             .foregroundStyle(s.kind == .exposure ? T.warning : T.accentStrong).frame(width: 60, alignment: .leading)
                         TextField("Name", text: $s.name).textFieldStyle(CueFieldStyle()).frame(width: 140)
-                        if s.kind == .position {
+                        if s.kind == .position && !ptz.canSaveShots(camera) {
+                            number("Camera preset", Binding(get: { s.preset ?? 0 }, set: { s.preset = $0 > 0 ? $0 : nil }))
+                        } else if s.kind == .position {
                             number("Pan", $s.pan); number("Tilt", $s.tilt); number("Zoom", $s.zoom)
                         } else {
                             number("Gain", exposure($s, \.gain)); number("Shutter", exposure($s, \.shutter)); number("Iris", exposure($s, \.iris))
@@ -424,7 +470,13 @@ struct ShotEditor: View {
                 }
                 HStack {
                     Button("Add position from the camera now") { ptz.saveShot("", camera: camera.id, kind: .position) }
-                    Button("Add exposure from the camera now") { ptz.saveShot("", camera: camera.id, kind: .exposure) }
+                    if ptz.canSaveShots(camera) {
+                        Button("Add exposure from the camera now") { ptz.saveShot("", camera: camera.id, kind: .exposure) }
+                    }
+                }
+                if !ptz.canSaveShots(camera) {
+                    Text("A VISCA camera can't report where it's pointing, so each shot is saved in one of the camera's own presets, from 9 up. Presets 1 to 8 are left for the preset buttons.")
+                        .font(.sans(12)).foregroundStyle(T.inkSubtle).fixedSize(horizontal: false, vertical: true)
                 }
                 let presets = ptz.presetNames(camera)
                 if !presets.isEmpty {
@@ -436,7 +488,7 @@ struct ShotEditor: View {
                             Text((ptz.exposurePresets[camera.id]?.contains(n) ?? false) ? "Exposure" : "Position")
                                 .font(.sans(11)).foregroundStyle(T.inkMuted).frame(width: 70, alignment: .leading)
                             Button("Recall") { ptz.recall(n, camera: camera.id) }
-                            Button("Delete from camera…") { deletingPreset = n }
+                            if ptz.canSaveShots(camera) { Button("Delete from camera…") { deletingPreset = n } }
                         }
                     }
                 }

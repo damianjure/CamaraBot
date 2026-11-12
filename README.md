@@ -56,6 +56,29 @@ Camera tools refuse a camera that's on Live unless the call says `allow_live: tr
 
 `swift test` runs the camera code against pretend cameras on this Mac and checks the stops go out.
 
+## Companion and other control
+
+The control server (`ControlServer.swift`, port 9911) is what the MCP server and the
+Companion module use. It answers on 127.0.0.1 only, unless **Allow control from other
+computers on the network** is on in Setup, on the Control page. That setting is off by default and kept in this Mac's preferences, not in
+the config file, so nothing that edits the config can turn it on. On or off, every
+request must send the control key (header `x-cuevideo-token`); without it CueVideo
+answers 401 and does nothing. The Control page also shows and copies the key. `swift test` checks the key comparison and
+which addresses count as this Mac.
+
+## Saved shots on VISCA cameras
+
+Canon cameras report where they point, so a Canon shot keeps pan, tilt and zoom in
+the config file. VISCA cameras can't be asked here, so a VISCA shot is saved in one
+of the camera's own presets (CAM_Memory Set, `81 01 04 3F 01 pp FF`) and recalled
+from it (CAM_Memory Recall, `81 01 04 3F 02 pp FF`). The shot keeps that preset as
+`preset`, numbered from 1 like the preset buttons, and the camera's `firstPreset`
+maps it to the camera's own count the same way. Shots use presets 9 to 80, so 1 to 8
+stay for the preset buttons. A VISCA shot written by hand without `preset` can't move
+the camera; `recall_shot` says so instead of answering ok. `swift test` checks the
+bytes sent on save and recall against a pretend camera, for cameras that count presets
+from 0 and from 1.
+
 ## Camera speed, exposure and color matching
 
 - **Manual speed:** a tortoise-to-hare dial under the joystick (0.25× to 2×) sets how fast the joystick, zoom and arrow keys move every camera (config `ptzSpeed`).
@@ -124,7 +147,8 @@ CueVideo shows "waiting for control" when this happens; close the other one.
 VISCA cameras, then
 `CUEVIDEO_HOST=127.0.0.1 CUEVIDEO_FAKECAMS=127.0.0.1 CUEVIDEO_SELFTEST=1 CUEVIDEO_SNAPSHOT=<folder> ./CueVideo.app/Contents/MacOS/CueVideo`
 runs every command, prints the state after each, and writes screenshots. Self-tests
-never write to the setup file. Never run the self-test against a switcher that is
+never write to the setup file. A self-test runs the control server only when it
+names its own port with `CUEVIDEO_CONTROL_PORT`, so it never meets the real app's. Never run the self-test against a switcher that is
 live on a service.
 
 Keys: 1 to 0 put that source-row tile on Next, Shift plus a number cuts it to Live,

@@ -128,9 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         booth.store.attach(booth)
         AutoTracker.shared.attach()
-        // Claude's way in (through the CueVideo MCP server). Not during self-tests, which
-        // may run beside the real app.
-        if !booth.store.readOnly { ControlServer.shared.start() }
+        // Claude's and Companion's way in. Not during self-tests, which may run beside the real
+        // app, unless the test names its own control port.
+        if !booth.store.readOnly || env["CUEVIDEO_CONTROL_PORT"] != nil { ControlServer.shared.start() }
         // For screenshots in self-tests: CUEVIDEO_VIEW=engineer or engineer:routing.
         if let v = env["CUEVIDEO_VIEW"] {
             let parts = v.split(separator: ":").map(String.init)

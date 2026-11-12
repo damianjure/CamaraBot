@@ -735,18 +735,16 @@ struct PresetGrid: View {
                             if ptz.canSaveShots(c) { Button("Delete from camera…") { deletingPreset = (c.id, n) } }
                         }
                     }
-                    if ptz.canSaveShots(c) {
-                        Button { newName = ""; savingFor = c.id } label: {
-                            Image(systemName: "plus").font(.system(size: 13, weight: .bold)).foregroundStyle(T.accentStrong)
-                                .frame(width: 40, height: 40)
-                                .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PressStyle())
-                        .help("Save where \(c.name) is now as a new shot")
-                        .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
-                            savePopover(c)
-                        }
+                    Button { newName = ""; savingFor = c.id } label: {
+                        Image(systemName: "plus").font(.system(size: 13, weight: .bold)).foregroundStyle(T.accentStrong)
+                            .frame(width: 40, height: 40)
+                            .background(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .help("Save where \(c.name) is now as a new shot")
+                    .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
+                        savePopover(c)
                     }
                 }
             }
@@ -790,7 +788,8 @@ struct PresetGrid: View {
     func savePopover(_ t: PTZCamera) -> some View {
         VStack(alignment: .leading, spacing: T.s3) {
             Text("Save a shot on \(t.name)").font(.sans(14, .bold))
-            Text("Pan, tilt and zoom, where the camera is pointing now.")
+            Text(ptz.canSaveShots(t) ? "Pan, tilt and zoom, where the camera is pointing now."
+                 : "Where the camera is pointing now, saved in one of the camera's own presets (9 and up).")
                 .font(.sans(12)).foregroundStyle(T.inkMuted)
             TextField("Pulpit", text: $newName)
                 .textFieldStyle(.roundedBorder).onSubmit { save(t) }

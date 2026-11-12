@@ -101,9 +101,9 @@ enum ControlTools {
              ["from": any("The camera to copy from (name, IP or input)."), "to": ["type": "array", "items": ["type": ["string", "integer"]], "description": "Cameras to change. Leave out for all the others."],
               "settings": ["type": "array", "items": ["type": "string", "enum": ["gain", "shutter", "iris", "white_balance"]], "description": "Which settings to copy. Leave out for all four."],
               "allow_live": allowLive], required: ["from"]),
-        tool("recall_shot", "Recall a shot saved in CueVideo: move to its position, or set its exposure.",
+        tool("recall_shot", "Recall a shot saved in CueVideo: move to its position, or set its exposure. On a VISCA camera this recalls the camera preset the shot was saved in.",
              ["camera": camera, "shot": str("The shot's name."), "allow_live": allowLive], required: ["shot"]),
-        tool("save_shot", "Save the camera as it is now as a CueVideo shot: its position (pan, tilt, zoom, the default) or its exposure (gain, shutter, iris).",
+        tool("save_shot", "Save the camera as it is now as a CueVideo shot: its position (pan, tilt, zoom, the default) or its exposure (gain, shutter, iris). VISCA cameras save position only, into one of the camera's own presets from 9 up (presets 1 to 8 are left alone).",
              ["camera": camera, "name": str("A short name, such as Pulpit."), "kind": choice("What to save. Default position.", ["position", "exposure"]),
               "replace": bool("true to overwrite an existing shot with this name instead of adding another.")], required: ["name"]),
         tool("rename_shot", "Rename a CueVideo shot.", ["camera": camera, "shot": str("Current name."), "new_name": str("New name.")], required: ["shot", "new_name"]),
@@ -395,15 +395,29 @@ enum ControlTools {
                     ["source": expo(x), "changed": changed, "skipped": skipped]))
         case "recall_shot":
             let c = try cam(a, changing: true), sh = try shot(c, a["shot"])
-            ptz.go(to: sh, camera: c.id); done(ok("\(c.name): \(sh.name)"))
+            guard ptz.canRecall(sh, on: c) else {
+                throw fail(sh.kind == .exposure
+                    ? "\(c.name) is a VISCA camera, and CueVideo can't set exposure on VISCA cameras yet."
+                    : "\(sh.name) has no camera preset, so \(c.name) (VISCA) can't be moved to it. Save it again from CueVideo, which stores it in a camera preset.")
+            }
+            ptz.go(to: sh, camera: c.id)
+            done(ok("\(c.name): \(sh.name)\(sh.preset.map { c.proto == .canonXC ? "" : " (camera preset \($0))" } ?? "")"))
         case "save_shot":
             let c = try cam(a, changing: false)
             let name = (a["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { throw fail("Give the shot a name.") }
             let kind = ShotKind(rawValue: a["kind"] as? String ?? "position") ?? .position
             let existing = (a["replace"] as? Bool ?? false) ? c.shots.first { $0.name.lowercased() == name.lowercased() } : nil
+            if c.proto != .canonXC {
+                guard kind == .position else { throw fail("\(c.name) is a VISCA camera, which saves position shots only.") }
+                guard ptz.online.contains(c.id) else { throw fail("\(c.name) isn't answering, so nothing was saved.") }
+                guard existing?.preset != nil || ptz.freeShotPreset(c) != nil else {
+                    throw fail("\(c.name) has no free camera preset left for shots (\(PTZController.shotPresets.lowerBound) to \(PTZController.shotPresets.upperBound)). Delete a shot or save over one with replace.")
+                }
+            }
             ptz.saveShot(name, camera: c.id, kind: kind, replacing: existing?.id) { worked in
-                done(worked ? ok("Saved \(kind.rawValue) shot \(name) on \(c.name)")
+                let preset = ptz.cameras.first { $0.id == c.id }?.shots.last { $0.name == name }?.preset
+                done(worked ? ok("Saved \(kind.rawValue) shot \(name) on \(c.name)\(preset.map { " in camera preset \($0)" } ?? "")")
                             : ["error": "\(c.name) didn't report its settings, so nothing was saved."])
             }
         case "rename_shot":
@@ -674,6 +688,7 @@ enum ControlTools {
             }
             let shots = c.shots.map { sh -> [String: Any] in
                 sh.kind == .position ? ["name": sh.name, "kind": "position", "pan": sh.pan, "tilt": sh.tilt, "zoom": sh.zoom]
+                                         .merging(sh.preset.map { ["camera_preset": $0] } ?? [:]) { a, _ in a }
                                      : ["name": sh.name, "kind": "exposure"].merging(expo(sh.exposure ?? PTZExposure())) { a, _ in a }
             }
             var d: [String: Any] = [

@@ -134,12 +134,17 @@ public struct PTZShot: Codable, Hashable, Identifiable {
     public var exposure: PTZExposure?
     /// Made by a stage scan, not by hand. The next scan replaces these; yours are kept.
     public var auto = false
+    /// VISCA cameras can't report where they point, so a VISCA position shot is kept in one of
+    /// the camera's own presets (Memory Set) and recalled from it (Memory Recall). This is that
+    /// preset, numbered from 1 like the preset buttons, so the camera's `firstPreset` maps it
+    /// the same way. Canon shots keep pan, tilt and zoom instead and leave this empty.
+    public var preset: Int?
     public var position: PTZPosition { PTZPosition(pan: pan, tilt: tilt, zoom: zoom) }
 
     public init(name: String, _ p: PTZPosition) { self.name = name; pan = p.pan; tilt = p.tilt; zoom = p.zoom }
     public init(name: String, exposure e: PTZExposure) { self.name = name; kind = .exposure; exposure = e }
 
-    private enum Keys: String, CodingKey { case id, name, kind, pan, tilt, zoom, exposure, auto }
+    private enum Keys: String, CodingKey { case id, name, kind, pan, tilt, zoom, exposure, auto, preset }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -150,6 +155,7 @@ public struct PTZShot: Codable, Hashable, Identifiable {
         tilt = try c.decodeIfPresent(Int.self, forKey: .tilt) ?? 0
         zoom = try c.decodeIfPresent(Int.self, forKey: .zoom) ?? 0
         auto = try c.decodeIfPresent(Bool.self, forKey: .auto) ?? false
+        preset = try c.decodeIfPresent(Int.self, forKey: .preset)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -160,6 +166,7 @@ public struct PTZShot: Codable, Hashable, Identifiable {
         if auto { try c.encode(true, forKey: .auto) }
         if kind == .position {
             try c.encode(pan, forKey: .pan); try c.encode(tilt, forKey: .tilt); try c.encode(zoom, forKey: .zoom)
+            try c.encodeIfPresent(preset, forKey: .preset)
         } else {
             try c.encodeIfPresent(exposure, forKey: .exposure)
         }
@@ -192,8 +199,9 @@ protocol PTZLink: AnyObject {
     func store(_ n: Int)
     /// Where the camera is now, or nil if it can't say.
     func readPosition(_ done: @escaping (PTZPosition?) -> Void)
-    /// Move straight to a saved position.
-    func goTo(_ p: PTZPosition)
+    /// Move to a saved position shot: Canon straight to its pan, tilt and zoom, VISCA by
+    /// recalling the camera preset it was saved in.
+    func goTo(_ s: PTZShot)
     /// Delete a preset stored on the camera itself. Calls back with nil when it worked, or why not.
     func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void)
     /// Read the exposure now (reported through onExposure).
@@ -298,11 +306,17 @@ final class VISCALink: PTZLink {
     func autoFocus(_ on: Bool) { send([0x81, 0x01, 0x04, 0x38, on ? 0x02 : 0x03, 0xFF]) }
     func focusOnce() { send([0x81, 0x01, 0x04, 0x18, 0x01, 0xFF]) }
     func home() { send([0x81, 0x01, 0x06, 0x04, 0xFF]) }
-    func recall(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x02, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
-    func store(_ n: Int) { send([0x81, 0x01, 0x04, 0x3F, 0x01, UInt8(clamping: n - 1 + camera.firstPreset), 0xFF]) }
-    // VISCA cameras keep shots in their own presets (store/recall above) for now.
+    /// CAM_Memory Recall (81 01 04 3F 02 pp FF) and Set (81 01 04 3F 01 pp FF). `n` counts from
+    /// 1, as on the preset buttons; the camera's `firstPreset` says whether its own count starts at 0 or 1.
+    static func memory(_ set: Bool, _ n: Int, firstPreset: Int) -> [UInt8] {
+        [0x81, 0x01, 0x04, 0x3F, set ? 0x01 : 0x02, UInt8(clamping: n - 1 + firstPreset), 0xFF]
+    }
+    func recall(_ n: Int) { send(Self.memory(false, n, firstPreset: camera.firstPreset)) }
+    func store(_ n: Int) { send(Self.memory(true, n, firstPreset: camera.firstPreset)) }
+    // VISCA cameras can't be asked where they point here, so shots live in the camera's own
+    // presets: saving one stores a preset (PTZController.saveShot), recalling it recalls that preset.
     func readPosition(_ done: @escaping (PTZPosition?) -> Void) { done(nil) }
-    func goTo(_ p: PTZPosition) {}
+    func goTo(_ s: PTZShot) { if let n = s.preset { recall(n) } }
     // VISCA has no delete; a preset is replaced by saving over it.
     func deletePreset(_ n: Int, _ done: @escaping (String?) -> Void) { done("VISCA cameras can't delete presets; save over one instead.") }
     // Exposure over VISCA isn't wired up yet.
@@ -665,7 +679,8 @@ final class CanonLink: PTZLink {
         }
     }
 
-    func goTo(_ p: PTZPosition) {
+    func goTo(_ s: PTZShot) {
+        let p = s.position
         let q = "pan=\(p.pan)&tilt=\(p.tilt)&zoom=\(p.zoom)"
         lastDrive = q  // so a joystick stop still waiting to be re-sent can't cut this move short
         control(q, key: "drive")
@@ -855,7 +870,7 @@ public final class PTZController: ObservableObject {
     /// Recall a saved shot: move to its position, or set its exposure.
     public func go(to shot: PTZShot, camera: UUID? = nil) {
         switch shot.kind {
-        case .position: manual(camera); with(camera) { $0.goTo(shot.position) }
+        case .position: manual(camera); with(camera) { $0.goTo(shot) }
         case .exposure: if let e = shot.exposure { setExposure(e, camera: camera) }
         }
     }
@@ -879,7 +894,8 @@ public final class PTZController: ObservableObject {
     public func refreshExposure(camera: UUID? = nil) { with(camera) { $0.readExposure() } }
 
     /// Reads the camera now and saves it as a shot: a new one, or over `replacing`. A position
-    /// shot keeps pan, tilt and zoom; an exposure shot keeps gain, shutter and iris.
+    /// shot keeps pan, tilt and zoom (on a VISCA camera, the camera preset it's stored in); an
+    /// exposure shot keeps gain, shutter and iris.
     /// Calls back on the main thread with false if the camera couldn't say.
     public func saveShot(_ name: String, camera id: UUID, kind: ShotKind = .position, replacing: UUID? = nil, done: ((Bool) -> Void)? = nil) {
         if kind == .exposure {
@@ -897,6 +913,10 @@ public final class PTZController: ObservableObject {
                 }
                 done?(true)
             }
+            return
+        }
+        if let c = cameras.first(where: { $0.id == id }), c.proto != .canonXC {
+            saveShotInPreset(name, camera: c, replacing: replacing, done: done)
             return
         }
         queue.async {
@@ -919,6 +939,44 @@ public final class PTZController: ObservableObject {
         }
     }
 
+    /// Camera presets CueVideo saves VISCA shots in: 9 and up, so 1 to 8 (the preset buttons
+    /// shown for a VISCA camera) stay the operator's. Kept under 81 because PTZOptics and others
+    /// use some presets from 90 up for menu and special functions.
+    public static let shotPresets = 9...80
+
+    /// The camera preset a new VISCA shot goes in: the first one from `shotPresets` that no
+    /// other shot and no named preset uses. Nil when they're all taken.
+    public func freeShotPreset(_ c: PTZCamera) -> Int? {
+        let used = Set(c.shots.compactMap(\.preset)).union(presetNames(c).keys)
+        return Self.shotPresets.first { !used.contains($0) }
+    }
+
+    /// A VISCA position shot: store the camera's position in one of its own presets (the one the
+    /// shot already has when replacing), and remember that preset on the shot.
+    private func saveShotInPreset(_ name: String, camera c: PTZCamera, replacing: UUID?, done: ((Bool) -> Void)?) {
+        let old = replacing.flatMap { r in c.shots.first { $0.id == r } }
+        guard online.contains(c.id), let n = old?.preset ?? freeShotPreset(c),
+              let i = cameras.firstIndex(where: { $0.id == c.id }) else { done?(false); return }
+        with(c.id) { $0.store(n) }
+        if let r = replacing, let j = cameras[i].shots.firstIndex(where: { $0.id == r }) {
+            cameras[i].shots[j].kind = .position
+            cameras[i].shots[j].exposure = nil
+            cameras[i].shots[j].preset = n
+            if !name.isEmpty { cameras[i].shots[j].name = name }
+        } else {
+            var s = PTZShot(name: name.isEmpty ? "Shot \(cameras[i].shots.count + 1)" : name, PTZPosition(pan: 0, tilt: 0, zoom: 0))
+            s.preset = n
+            cameras[i].shots.append(s)
+        }
+        done?(true)
+    }
+
+    /// Whether recalling this shot will do anything on this camera. Canon goes to any position
+    /// or exposure; a VISCA camera needs the shot saved in one of its presets.
+    public func canRecall(_ s: PTZShot, on c: PTZCamera) -> Bool {
+        c.proto == .canonXC || (s.kind == .position && s.preset != nil)
+    }
+
     /// Deletes a preset stored on the camera. Calls back on the main thread with nil when it
     /// worked, or the reason it didn't.
     public func deleteCameraPreset(_ n: Int, camera id: UUID, done: @escaping (String?) -> Void) {
@@ -934,6 +992,7 @@ public final class PTZController: ObservableObject {
         c.proto == .canonXC ? controlled.contains(c.id) : online.contains(c.id)
     }
 
-    /// Whether this camera can save shots in CueVideo (Canon's HTTP control reports its position).
+    /// Whether this camera reports its position and exposure and can delete its presets (Canon's
+    /// HTTP control). Every camera can save position shots: VISCA cameras keep them in their own presets.
     public func canSaveShots(_ c: PTZCamera) -> Bool { c.proto == .canonXC }
 }
