@@ -163,10 +163,12 @@ struct CueConfig: Codable, Equatable {
     /// Changes to the follow-shot framing, by size: "shoulders", "waist", "full".
     var framing: [String: FramingRule] = [:]
     var trackTuning = TrackTuning()
+    /// Fixed USB cameras steered by cropping their picture and sent out over NDI (see VirtualCamera).
+    var virtualCameras: [VirtualCamera] = []
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -185,6 +187,7 @@ struct CueConfig: Codable, Equatable {
         routes = try c.decodeIfPresent([RouteButton].self, forKey: .routes) ?? []
         framing = try c.decodeIfPresent([String: FramingRule].self, forKey: .framing) ?? [:]
         trackTuning = try c.decodeIfPresent(TrackTuning.self, forKey: .trackTuning) ?? TrackTuning()
+        virtualCameras = try c.decodeIfPresent([VirtualCamera].self, forKey: .virtualCameras) ?? []
     }
 }
 
