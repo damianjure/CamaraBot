@@ -128,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         booth.store.attach(booth)
         AutoTracker.shared.attach()
+        // Virtual cameras (USB capture, cropped and sent out over NDI). Not during self-tests,
+        // which may run beside the real app and must not take its capture devices or NDI names.
+        if !booth.store.readOnly { VirtualCameras.shared.attach(booth.store) }
         // Claude's way in (through the CueVideo MCP server). Not during self-tests, which
         // may run beside the real app.
         if !booth.store.readOnly { ControlServer.shared.start() }
