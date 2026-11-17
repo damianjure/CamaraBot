@@ -125,7 +125,7 @@ Add them to the setup file (or with Claude's `update_config`; `list_capture_devi
 ]
 ```
 
-Only `device` and `ndiName` are needed. It follows the person nearest the middle when it starts. Claude can steer it with `virtual_follow`, `virtual_shot` (a saved crop, `wide` or `hold`), `save_virtual_shot` and `list_virtual_cameras`. In vMix add an NDI input; for Zoom use NDI Tools' NDI Virtual Input. The first run asks for camera access.
+Only `device` and `ndiName` are needed. It follows the person nearest the middle when it starts. Claude can steer it with `virtual_follow`, `virtual_shot` (a saved crop, `wide` or `hold`), `save_virtual_shot` and `list_virtual_cameras`. In vMix add an NDI input; for Zoom use NDI Tools' NDI Virtual Input. The first run asks for camera access. Only external devices (capture boxes, USB webcams) are offered: the Mac's own camera can't be sent out as an NDI source.
 
 ## Stage scan
 

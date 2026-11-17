@@ -62,8 +62,8 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     func unsubscribe(_ id: UUID) { lock.lock(); subscribers[id] = nil; lock.unlock() }
 
     func start() {
-        control.async {
-            guard !self.wanted else { return }
+        control.async { [weak self] in
+            guard let self, !self.wanted else { return }
             self.wanted = true
             self.configureAndRun()
             let t = DispatchSource.makeTimerSource(queue: self.control)
@@ -85,7 +85,9 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
 
     // MARK: Devices and formats
 
-    /// Every video capture device now: external ones (USB capture boxes, webcams) and the Mac's own.
+    /// Every external video capture device now (USB capture boxes, webcams). The Mac's own
+    /// camera is left out on purpose: a setup file or a Claude tool must not be able to put it
+    /// on the network as an NDI source.
     static func devices() -> [CaptureDeviceInfo] {
         discovery().devices.map { d in
             CaptureDeviceInfo(id: d.uniqueID, name: d.localizedName, formats: describe(d.formats))
@@ -93,11 +95,12 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     }
 
     private static func discovery() -> AVCaptureDevice.DiscoverySession {
-        AVCaptureDevice.DiscoverySession(deviceTypes: [.external, .builtInWideAngleCamera], mediaType: .video, position: .unspecified)
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .video, position: .unspecified)
     }
 
+    /// Only an external device, even when given the ID of the built-in camera.
     private static func device(_ id: String) -> AVCaptureDevice? {
-        AVCaptureDevice(uniqueID: id) ?? discovery().devices.first { $0.uniqueID == id }
+        discovery().devices.first { $0.uniqueID == id }
     }
 
     private static func dims(_ f: AVCaptureDevice.Format) -> (w: Int, h: Int) {
@@ -154,7 +157,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
             return
         default: break
         }
-        guard let device = Self.device(deviceID) else { fail("The capture device isn't connected."); return }
+        guard let device = Self.device(deviceID) else { fail("The capture device isn't connected, or isn't an external one."); return }
         guard let format = Self.pick(device.formats, preferred: preferred) else { fail("The capture device offers no video format."); return }
 
         if session.isRunning { session.stopRunning() }
@@ -197,16 +200,21 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         if let r = Self.fastest(format) { duration = r.minFrameDuration }
         lock.unlock()
         session.startRunning()
-        fail(nil)
     }
 
     /// Every two seconds: say the picture stopped when frames stop, and open the device again
-    /// when it has been gone for a while (unplugged and plugged back in).
+    /// when it has been gone for a while (unplugged and plugged back in). A device that is there
+    /// but sends nothing (nothing plugged into the box) is not reopened over and over: it gets a
+    /// plain explanation and a slower retry.
     private func check() {
         guard wanted else { return }
-        let quiet = Date().timeIntervalSince(lastFrame)
+        let now = Date()
+        let quiet = now.timeIntervalSince(lastFrame)
         if quiet > 2, live { DispatchQueue.main.async { self.live = false } }
-        if quiet > 3, Date().timeIntervalSince(lastConfigure) > 3 { configureAndRun() }
+        guard quiet > 3 else { return }
+        let present = Self.device(deviceID) != nil
+        if present { fail("The capture device is connected but sends no picture. Check that the camera is on and plugged into it.") }
+        if now.timeIntervalSince(lastConfigure) > (present ? 10 : 3) { configureAndRun() }
     }
 
     // MARK: Frames
@@ -223,6 +231,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         let fps = duration
         lock.unlock()
         if !live || changed {
+            DispatchQueue.main.async { if self.problem != nil { self.problem = nil } }
             let rate = Double(fps.timescale) / Double(max(1, fps.value))
             let line = String(format: "%dx%d @ %.2f", w, h, rate)
             DispatchQueue.main.async {

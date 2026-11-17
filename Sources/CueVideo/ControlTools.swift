@@ -190,7 +190,11 @@ enum ControlTools {
             }, "saved": store.config.virtualCameras.map(\.name)])
         case "virtual_follow":
             let r = try virtual(a)
-            let size = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:))
+            var size: ShotSize?
+            if let name = a["shot"] as? String {
+                guard let s = ShotSize(rawValue: name.lowercased()) else { throw fail("Unknown shot \(name). Use shoulders, waist or full.") }
+                size = s
+            }
             r.frame(as: size, config: store.config)
             r.followPerson(at: (a["x"] == nil && a["y"] == nil) ? nil : CGPoint(x: dbl(a["x"] ?? 0.5), y: dbl(a["y"] ?? 0.5)))
             done(ok("\(r.camera.name) is following \(a["x"] == nil && a["y"] == nil ? "the person nearest the middle" : "the person nearest that point"), as a \(r.shot.name.lowercased()) shot"))

@@ -164,16 +164,28 @@ final class VirtualCameraRuntime: @unchecked Sendable {
 
     /// The first frame (or a new input format) tells the real picture size: set the zoom limit
     /// from it and start again from the widest shot.
-    private func ensureGeometry(_ w: Int, _ h: Int) {
+    func ensureGeometry(_ w: Int, _ h: Int) {
         lock.lock(); defer { lock.unlock() }
         guard geometry?.w != w || geometry?.h != h else { return }
+        let first = geometry == nil
         geometry = (w, h)
         let zoom = zoomOverride ?? CropPlanner.maxZoom(inputHeight: h, outputHeight: outputHeight)
         let planner = CropPlanner(sourceAspect: Double(w) / Double(h), outputAspect: 16.0 / 9, maxZoom: zoom)
         motion.reset(planner)
         follow = VirtualFollow(planner: planner, framing: framing)
-        mode = .follow
+        if first {
+            // Steered before the first frame (a shot, wide, hold): keep that, now the size is known.
+            switch mode {
+            case .shot(let crop): motion.setGoal(crop, cut: true)
+            case .wide, .hold, .follow: break
+            }
+        } else {
+            mode = .follow  // a new input format: start again from the widest shot, following
+        }
     }
+
+    /// For tests and status: how it is being steered.
+    var currentMode: VirtualMode { lock.lock(); defer { lock.unlock() }; return mode }
 
     private func detectIfDue(_ pixels: CVPixelBuffer) {
         let now = Date()

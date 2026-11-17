@@ -21,6 +21,8 @@ final class VirtualOutput: @unchecked Sendable {
     private var sentCount = 0, droppedCount = 0
     private var lastSent = Date.distantPast
     private var runtimeMissing = false
+    /// Once closed it never sends again: a frame still in flight must not reopen the NDI source.
+    private var closed = false
 
     init(name: String, size: OutputSize) {
         self.name = name
@@ -55,6 +57,7 @@ final class VirtualOutput: @unchecked Sendable {
     /// Closes the NDI sender once whatever is rendering has finished.
     func close() {
         queue.async { [self] in
+            closed = true
             if let s = sender { ndi_send_close(s); sender = nil }
             pool = nil
         }
@@ -63,6 +66,7 @@ final class VirtualOutput: @unchecked Sendable {
     // MARK: Rendering (on `queue`)
 
     private func openSender() -> UnsafeMutableRawPointer? {
+        if closed { return nil }
         if let sender { return sender }
         // The NDI runtime may be missing: try again now and then, not on every frame.
         guard Date().timeIntervalSince(triedAt) > 5 else { return nil }

@@ -297,3 +297,58 @@ final class VirtualCameraPipelineTests: XCTestCase {
         }
     }
 }
+
+/// The running virtual camera's steering, with no capture device and no NDI: it is never started.
+final class VirtualCameraRuntimeTests: XCTestCase {
+    func makeRuntime() -> VirtualCameraRuntime {
+        VirtualCameraRuntime(VirtualCamera(name: "Pulpit", device: "none", ndiName: "Test Pulpit"), config: CueConfig())
+    }
+
+    /// Steered before the first frame arrives (the size isn't known yet): the first frame doesn't undo it.
+    func testTheFirstFrameKeepsAModeSetBeforeIt() {
+        let r = makeRuntime()
+        r.wide()
+        r.ensureGeometry(3840, 2160)
+        XCTAssertEqual(r.currentMode, .wide)
+        let crop = CropRect(x: 0.2, y: 0.2, w: 0.4, h: 0.4)
+        let r2 = makeRuntime()
+        r2.go(to: CropShot(name: "Lectern", crop: crop))
+        r2.ensureGeometry(3840, 2160)
+        XCTAssertEqual(r2.currentMode, .shot(crop))
+    }
+
+    /// A new input format (a different cable, a different camera setting) starts again from following.
+    func testANewInputFormatStartsAgainFromFollowing() {
+        let r = makeRuntime()
+        r.ensureGeometry(3840, 2160)
+        r.hold()
+        XCTAssertEqual(r.currentMode, .hold)
+        r.ensureGeometry(1920, 1080)
+        XCTAssertEqual(r.currentMode, .follow)
+    }
+
+    /// The zoom limit comes from the real picture size: 4K gives more room than 1080p.
+    func testTheZoomLimitComesFromTheRealPictureSize() {
+        let r = makeRuntime()
+        r.ensureGeometry(3840, 2160)
+        XCTAssertEqual(r.status().maxZoom ?? 0, 2.5, accuracy: 1e-9)
+        r.ensureGeometry(1920, 1080)
+        XCTAssertEqual(r.status().maxZoom ?? 0, 1.25, accuracy: 1e-9)
+    }
+
+    /// Saving a shot or reframing changes the setup but not the mode or the crop it is in.
+    func testASetupUpdateKeepsTheModeAndTheCrop() {
+        let r = makeRuntime()
+        r.ensureGeometry(3840, 2160)
+        r.wide()
+        var cam = r.camera
+        cam.shots = [CropShot(name: "Lectern", crop: CropRect(x: 0.1, y: 0.1, w: 0.4, h: 0.4))]
+        cam.shotSize = "full"
+        let before = r.status().crop
+        r.update(cam, config: CueConfig())
+        XCTAssertEqual(r.currentMode, .wide)
+        XCTAssertEqual(r.status().crop, before)
+        XCTAssertEqual(r.camera.shots.count, 1)
+        XCTAssertEqual(r.shot, .full)
+    }
+}
