@@ -227,6 +227,9 @@ final class VirtualCameras {
             .sink { [weak self] config in self?.apply(config) }
     }
 
+    /// The running camera for a setup entry; nil while it is switched off.
+    func runtime(for id: UUID) -> VirtualCameraRuntime? { runtimes[id] }
+
     var all: [VirtualCameraRuntime] { Array(runtimes.values).sorted { $0.camera.name < $1.camera.name } }
 
     /// A virtual camera by name or NDI name (any case), or the only one when none is named.
@@ -238,7 +241,7 @@ final class VirtualCameras {
     }
 
     private func apply(_ config: CueConfig) {
-        let wanted = Dictionary(config.virtualCameras.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let wanted = Dictionary(config.virtualCameras.filter(\.enabled).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         for (id, r) in runtimes where wanted[id]?.pipeline != r.camera.pipeline {
             r.stop()
             runtimes[id] = nil

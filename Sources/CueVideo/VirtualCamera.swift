@@ -28,6 +28,8 @@ struct CropShot: Codable, Hashable, Identifiable {
 struct VirtualCamera: Codable, Hashable, Identifiable {
     var id = UUID()
     var name = "Virtual camera"
+    /// Off: it isn't captured or sent, and the setup is kept.
+    var enabled = true
     /// The capture device's unique ID (see the capture devices list in Engineer).
     var device: String
     /// Which format to ask the device for, as "3840x2160". Nil takes the largest it offers.
@@ -51,12 +53,13 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, device, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Virtual camera"
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         device = try c.decode(String.self, forKey: .device)
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080

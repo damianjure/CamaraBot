@@ -28,7 +28,7 @@ struct SwitcherWindow: View {
 
 /// The parts of Setup, as tabs across the top of the page.
 enum SetupPage: String, CaseIterable, Identifiable {
-    case switcher, sources, keys, cameras, tracking, assistant, file
+    case switcher, sources, keys, cameras, virtual, tracking, assistant, file
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -36,6 +36,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .sources: return "Sources"
         case .keys: return "Key buttons"
         case .cameras: return "Cameras"
+        case .virtual: return "Virtual cameras"
         case .tracking: return "Tracking"
         case .assistant: return "AI assistant"
         case .file: return "Setup file"
@@ -47,6 +48,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .sources: return "The tiles the operator can put on Next, left to right."
         case .keys: return "On and off buttons under Fade and Cut, such as lower thirds."
         case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
+        case .virtual: return "Fixed USB cameras that follow a person by cropping their picture, sent out over NDI."
         case .tracking: return "How auto tracking follows a person."
         case .assistant: return "Let Claude set up and run Churchfront Video for you, in plain words."
         case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
@@ -58,6 +60,7 @@ enum SetupPage: String, CaseIterable, Identifiable {
         case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
         case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
         case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
+        case .virtual: return "A fixed camera on a USB capture box can follow a speaker with no motors: Churchfront Video crops its picture and sends the crop out as an NDI source for vMix or Zoom. Cropping is digital zoom, so a 4K input has far more room to zoom than a 1080p one. Many capture boxes take 4K over HDMI but only give 1080p over USB: the format list shows what this Mac really gets."
         case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
         case .assistant: return "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download."
         case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
@@ -84,6 +87,7 @@ struct SetupTab: View {
             case .sources: sources
             case .keys: keyButtons
             case .cameras: cameras
+            case .virtual: VirtualCamerasSetup()
             case .tracking: tracking
             case .assistant: AssistantSetup()
             case .file: configFile

@@ -352,3 +352,14 @@ final class VirtualCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(r.shot, .full)
     }
 }
+
+/// The on and off switch in Setup.
+final class VirtualCameraSwitchTests: XCTestCase {
+    func testAVirtualCameraIsOnUnlessTheFileSaysOff() throws {
+        let on = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"a","ndiName":"A"}"#.utf8))
+        XCTAssertTrue(on.enabled)
+        let off = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"a","ndiName":"A","enabled":false}"#.utf8))
+        XCTAssertFalse(off.enabled)
+        XCTAssertEqual(try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(off)), off)
+    }
+}
