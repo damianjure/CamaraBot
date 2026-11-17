@@ -129,6 +129,17 @@ enum ControlTools {
         tool("set_aux", "Full switcher: route a source to an aux output.", ["aux": int("Aux, counted from 1."), "source": source], required: ["aux", "source"]),
         tool("run_macro", "Full switcher: run a recorded macro.", ["macro": any("Macro number (from 1) or name.")], required: ["macro"]),
         tool("stop_macro", "Full switcher: stop the running macro."),
+
+        // Virtual cameras: a fixed USB camera steered by cropping its picture, sent out over NDI.
+        tool("list_capture_devices", "The USB video capture devices this Mac can see (a Blackmagic HDMI to USB box, a webcam), with their IDs and the formats macOS offers for each. Use an id as the device of a virtual camera. Check the formats: many capture boxes take 4K in over HDMI but only give 1080p over USB, which limits how far a virtual camera can zoom."),
+        tool("list_virtual_cameras", "Every virtual camera: a fixed USB camera steered by cropping its picture (a virtual PTZ) and sent out over NDI, for vMix and Zoom. Gives its input format, NDI name, mode (follow, hold, wide or shot), whether the picture and the NDI output are live, frames sent and dropped, the zoom limit, and the crop now. Add or change them with update_config: virtualCameras is a list of {name, device (from list_capture_devices), ndiName, output (p1080 or p720), shotSize (shoulders, waist or full), maxZoom, inputFormat such as 3840x2160, shots: [{name, crop: {x, y, w, h}}]}; each one given replaces the whole list."),
+        tool("virtual_follow", "Make a virtual camera follow a person by moving its crop: the person nearest x/y (0 to 1 across and down the picture) or nearest the middle, framed as a broadcast follow shot (shoulders up, waist up or full length) with the same rules auto tracking uses. This changes what vMix or Zoom receive from it, so confirm first if it is live there.",
+             ["camera": str("The virtual camera's name or NDI name. Leave out when there is only one."), "shot": choice("Follow shot size. Leave out to keep the current one.", ["shoulders", "waist", "full"]),
+              "x": num("0 (left) to 1 (right) across the picture."), "y": num("0 (top) to 1 (bottom) down the picture.")]),
+        tool("virtual_shot", "Move a virtual camera's crop: to a saved crop shot by name, to wide (the whole picture), or hold (stay where it is and stop following). Eases there like a PTZ move unless cut is true. Changes what vMix or Zoom receive, so confirm first if it is live there.",
+             ["camera": str("The virtual camera's name or NDI name. Leave out when there is only one."), "shot": str("A saved crop shot's name, or wide, or hold."), "cut": bool("Jump there at once instead of easing.")], required: ["shot"]),
+        tool("save_virtual_shot", "Save a virtual camera's crop as it is now as a named crop shot, to go back to with virtual_shot.",
+             ["camera": str("The virtual camera's name or NDI name. Leave out when there is only one."), "name": str("A short name, such as Lectern."), "replace": bool("true to overwrite a shot with this name.")], required: ["name"]),
     ]
 
     // MARK: Running a tool
@@ -156,12 +167,61 @@ enum ControlTools {
         case "update_config":
             guard let patch = a["config"] as? [String: Any] else { throw fail("Give config as an object.") }
             var obj = try configObject()
-            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "ptzSpeed", "framing", "trackTuning", "trackTilt", "trackZoom", "mixNames", "pictures", "screens", "routes"].contains(k) { obj[k] = v }
+            for (k, v) in patch where ["atemHost", "me", "sources", "keys", "cameras", "trackSpeed", "ptzSpeed", "framing", "trackTuning", "trackTilt", "trackZoom", "mixNames", "pictures", "screens", "routes", "virtualCameras"].contains(k) { obj[k] = v }
             let data = try JSONSerialization.data(withJSONObject: obj)
             let c: CueConfig
             do { c = try JSONDecoder().decode(CueConfig.self, from: data) } catch { throw fail("That config doesn't fit the format: \(error)") }
             store.update { $0 = c }
             done(ok("Config updated", ["config": try configObject()]))
+        case "list_capture_devices":
+            done(["devices": CaptureFeed.devices().map { ["id": $0.id, "name": $0.name, "formats": $0.formats] as [String: Any] },
+                  "note": "Use an id as the device of a virtual camera in update_config. If a device lists only 1080p, that is all macOS gets over USB."])
+        case "list_virtual_cameras":
+            done(["virtualCameras": VirtualCameras.shared.all.map { r -> [String: Any] in
+                let t = r.status()
+                var o: [String: Any] = ["name": t.name, "ndi": t.ndiName, "input": t.input, "capture_live": t.captureLive, "ndi_live": t.outputLive,
+                                        "frames_sent": t.sent, "frames_dropped": t.dropped, "mode": t.mode, "shot": t.shot, "following": t.phase,
+                                        "zoom_limit": t.zoomLimited,
+                                        "crop": ["x": t.crop.x, "y": t.crop.y, "w": t.crop.w, "h": t.crop.h]]
+                if let z = t.maxZoom { o["max_zoom"] = z }
+                if let p = t.problem { o["problem"] = p }
+                if t.runtimeMissing { o["problem"] = "NDI isn't installed on this Mac. Install NDI Tools." }
+                return o
+            }, "saved": store.config.virtualCameras.map(\.name)])
+        case "virtual_follow":
+            let r = try virtual(a)
+            let size = (a["shot"] as? String).flatMap(ShotSize.init(rawValue:))
+            r.frame(as: size, config: store.config)
+            r.followPerson(at: (a["x"] == nil && a["y"] == nil) ? nil : CGPoint(x: dbl(a["x"] ?? 0.5), y: dbl(a["y"] ?? 0.5)))
+            done(ok("\(r.camera.name) is following \(a["x"] == nil && a["y"] == nil ? "the person nearest the middle" : "the person nearest that point"), as a \(r.shot.name.lowercased()) shot"))
+        case "virtual_shot":
+            let r = try virtual(a)
+            let want = (a["shot"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let cut = a["cut"] as? Bool ?? false
+            switch want.lowercased() {
+            case "wide": r.wide(cut: cut); done(ok("\(r.camera.name) is going to the whole picture"))
+            case "hold": r.hold(); done(ok("\(r.camera.name) is holding where it is"))
+            default:
+                guard let shot = r.camera.shots.first(where: { $0.name.lowercased() == want.lowercased() }) else {
+                    throw fail("\(r.camera.name) has no crop shot called \(want). It has: \(r.camera.shots.map(\.name).joined(separator: ", ")), or use wide or hold.")
+                }
+                r.go(to: shot, cut: cut); done(ok("\(r.camera.name) is going to \(shot.name)"))
+            }
+        case "save_virtual_shot":
+            let r = try virtual(a)
+            let name = (a["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { throw fail("Give the shot a name.") }
+            let replace = a["replace"] as? Bool ?? false
+            if !replace, r.camera.shots.contains(where: { $0.name.lowercased() == name.lowercased() }) {
+                throw fail("\(r.camera.name) already has a crop shot called \(name). Send replace: true to overwrite it.")
+            }
+            let crop = r.currentCrop()
+            store.update { c in
+                guard let i = c.virtualCameras.firstIndex(where: { $0.id == r.camera.id }) else { return }
+                c.virtualCameras[i].shots.removeAll { $0.name.lowercased() == name.lowercased() }
+                c.virtualCameras[i].shots.append(CropShot(name: name, crop: crop))
+            }
+            done(ok("Saved \(name) on \(r.camera.name)"))
         case "show_window":
             let w = a["window"] as? String ?? "main"
             NotificationCenter.default.post(name: .cueVideoShowWindow, object: w)
@@ -529,6 +589,14 @@ enum ControlTools {
     private static func onlyOne<T>(_ hits: [T], _ asked: String, _ what: String, _ name: (T) -> String) throws -> T? {
         guard hits.count > 1 else { return hits.first }
         throw fail("\"\(asked)\" fits more than one \(what): \(hits.map(name).joined(separator: ", ")). Use the full name. Nothing was changed.")
+    }
+
+    /// The virtual camera a call names, or the only one.
+    private static func virtual(_ a: [String: Any]) throws -> VirtualCameraRuntime {
+        let hub = VirtualCameras.shared
+        if let r = hub.find(a["camera"] as? String) { return r }
+        if hub.all.isEmpty { throw fail("There are no virtual cameras running. Add one to virtualCameras with update_config (list_capture_devices gives the device).") }
+        throw fail("Say which virtual camera: \(hub.all.map(\.camera.name).joined(separator: ", ")).")
     }
 
     private static func cam(_ a: [String: Any], changing: Bool) throws -> PTZCamera {
