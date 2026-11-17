@@ -12,3 +12,8 @@ their owners. Churchfront Video is not affiliated with or endorsed by them.
 
 "Churchfront" is a registered trademark of Churchfront LLC. The Apache 2.0
 license does not grant permission to use it (section 6).
+
+Modifications: this fork adds virtual cameras (USB capture, tracking by cropping, NDI
+output): CaptureFeed.swift, CropPlanner.swift, VirtualCamera.swift, VirtualFollow.swift,
+VirtualCameraRuntime.swift and VirtualOutput.swift are new; Config.swift, ControlTools.swift,
+App.swift and build.sh are modified.

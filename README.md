@@ -111,6 +111,22 @@ The preview runs slightly behind real time, so tracking suits someone walking th
 
 Tracking keeps to one person by what they look like (clothes, build and colouring, worked out on this Mac with Apple's Vision framework), as well as by where they were. When two people cross it stays with the one it was following. After losing sight it waits for that person and does not pick up whoever is nearest; the badge says "Lost them, looking" until they're back, and clicking a person on the picture follows them instead. It is not face recognition and stores nothing between runs. People dressed alike are harder to tell apart: then it carries on by position while they're in sight.
 
+## Virtual cameras (USB capture, tracked by cropping, sent out over NDI)
+
+A fixed camera on a USB capture box (a Blackmagic HDMI to USB box, say) can follow a speaker with no motors: Churchfront Video finds the person, crops the picture with the same framing rules as auto tracking (shoulders, waist, full length; eye line, lead room, dead zone), and sends the crop out as an NDI source for vMix or Zoom. Cropping is digital zoom, so how tight it can go depends on the input: a 4K input to a 1080p output zooms to 2.5x, a 1080p input to 1080p only 1.25x (set `maxZoom` to override).
+
+Add them to the setup file (or with Claude's `update_config`; `list_capture_devices` gives the `device` ids and the formats macOS really offers, since many capture boxes take 4K over HDMI but only deliver 1080p over USB):
+
+```json
+"virtualCameras": [
+  { "name": "Pulpit", "device": "<id from list_capture_devices>", "ndiName": "Pulpit Tracked",
+    "output": "p1080", "shotSize": "waist", "inputFormat": "3840x2160",
+    "shots": [ { "name": "Lectern", "crop": { "x": 0.1, "y": 0.2, "w": 0.4, "h": 0.4 } } ] }
+]
+```
+
+Only `device` and `ndiName` are needed. It follows the person nearest the middle when it starts. Claude can steer it with `virtual_follow`, `virtual_shot` (a saved crop, `wide` or `hold`), `save_virtual_shot` and `list_virtual_cameras`. In vMix add an NDI input; for Zoom use NDI Tools' NDI Virtual Input. The first run asks for camera access.
+
 ## Stage scan
 
 **Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
