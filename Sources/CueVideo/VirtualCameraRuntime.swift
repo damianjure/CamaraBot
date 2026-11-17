@@ -15,7 +15,11 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     /// The least time between detections.
     static let detectionGap = 0.08
 
-    let camera: VirtualCamera
+    /// The setup for this camera. Updated while it runs for anything but the pipeline (see VirtualCamera.pipeline).
+    private(set) var camera: VirtualCamera
+    // The parts of it the capture thread reads: they never change while it runs.
+    private let zoomOverride: Double?
+    private let outputHeight: Int
 
     private let feed: CaptureFeed
     private let output: VirtualOutput
@@ -37,6 +41,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
 
     init(_ camera: VirtualCamera, config: CueConfig) {
         self.camera = camera
+        zoomOverride = camera.maxZoom
+        outputHeight = camera.output.height
         shot = camera.shot
         framing = Framing(camera.shot.standard.merged(config.framing[camera.shot.rawValue]))
         feed = CaptureFeedHub.shared.feed(camera.device, preferred: camera.inputFormat)
@@ -73,6 +79,14 @@ final class VirtualCameraRuntime: @unchecked Sendable {
 
     /// Frames the follow mode as this shot (shoulders, waist or full length), or as the one it
     /// already has when none is given, with the setup's current framing rules.
+    /// Takes a changed setup that doesn't need the pipeline reopened: saved shots, the name, the shot size.
+    /// Never changes the mode or the crop it is in now.
+    func update(_ cam: VirtualCamera, config: CueConfig) {
+        let sizeChanged = cam.shotSize != camera.shotSize
+        camera = cam
+        frame(as: sizeChanged ? cam.shot : nil, config: config)
+    }
+
     func frame(as size: ShotSize? = nil, config: CueConfig) {
         lock.lock(); defer { lock.unlock() }
         if let size { shot = size }
@@ -154,7 +168,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard geometry?.w != w || geometry?.h != h else { return }
         geometry = (w, h)
-        let zoom = camera.maxZoom ?? CropPlanner.maxZoom(inputHeight: h, outputHeight: camera.output.height)
+        let zoom = zoomOverride ?? CropPlanner.maxZoom(inputHeight: h, outputHeight: outputHeight)
         let planner = CropPlanner(sourceAspect: Double(w) / Double(h), outputAspect: 16.0 / 9, maxZoom: zoom)
         motion.reset(planner)
         follow = VirtualFollow(planner: planner, framing: framing)
@@ -213,14 +227,13 @@ final class VirtualCameras {
 
     private func apply(_ config: CueConfig) {
         let wanted = Dictionary(config.virtualCameras.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for (id, r) in runtimes where wanted[id] != r.camera {
+        for (id, r) in runtimes where wanted[id]?.pipeline != r.camera.pipeline {
             r.stop()
             runtimes[id] = nil
         }
         for (id, cam) in wanted {
             if let r = runtimes[id] {
-                // Only the framing rules can change while it runs.
-                r.frame(config: config)
+                r.update(cam, config: config)
             } else {
                 let r = VirtualCameraRuntime(cam, config: config)
                 runtimes[id] = r

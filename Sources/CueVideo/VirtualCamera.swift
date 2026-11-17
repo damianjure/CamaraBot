@@ -68,4 +68,11 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     }
 
     var shot: ShotSize { ShotSize(rawValue: shotSize) ?? .waist }
+
+    /// Whatever can only change by reopening the capture and the NDI output. A change to anything
+    /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
+    /// shot never drops a source that may be on air.
+    var pipeline: String {
+        [device, inputFormat ?? "", output.rawValue, ndiName, maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+    }
 }

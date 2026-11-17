@@ -277,3 +277,23 @@ final class VirtualOutputTests: XCTestCase {
         XCTAssertEqual(pixel(b, 0.75, 0.75).1, 255)
     }
 }
+
+/// Saving a shot, renaming or reframing must never reopen the capture or the NDI output, which may be on air.
+final class VirtualCameraPipelineTests: XCTestCase {
+    func testOnlyWhatReopensTheCaptureOrOutputChangesThePipeline() {
+        let base = VirtualCamera(name: "Pulpit", device: "abc", ndiName: "Pulpit Tracked")
+        var same = base
+        same.name = "Renamed"
+        same.shotSize = "full"
+        same.shots = [CropShot(name: "Lectern", crop: .full)]
+        same.atemInput = 4
+        XCTAssertEqual(same.pipeline, base.pipeline)
+        for change: (inout VirtualCamera) -> Void in [
+            { $0.device = "other" }, { $0.inputFormat = "1920x1080" }, { $0.output = .p720 }, { $0.ndiName = "Other" }, { $0.maxZoom = 2 },
+        ] {
+            var c = base
+            change(&c)
+            XCTAssertNotEqual(c.pipeline, base.pipeline)
+        }
+    }
+}
