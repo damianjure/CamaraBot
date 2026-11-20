@@ -1,0 +1,82 @@
+import SwiftUI
+
+/// What is wrong with a running virtual camera, in words an operator can act on.
+enum VirtualHealth {
+    /// Seconds after a camera starts before a missing picture counts as a fault.
+    static let grace = 4.0
+    /// The share of sent frames dropped before it is worth saying, once enough have gone out.
+    static let dropShare = 0.05
+    static let dropSample = 300
+
+    /// Empty when all is well.
+    static func problems(_ s: VirtualCameraRuntime.Status, age: TimeInterval) -> [String] {
+        guard age >= grace else { return [] }
+        var out: [String] = []
+        if !s.captureLive { out.append(s.problem ?? "no picture from the capture device") }
+        if s.runtimeMissing {
+            out.append("NDI isn't installed on this Mac")
+        } else if s.captureLive, !s.outputLive {
+            out.append("not sending over NDI")
+        } else if s.sent >= dropSample, Double(s.dropped) / Double(s.sent) > dropShare {
+            out.append(String(format: "dropping frames (%.0f%%)", 100 * Double(s.dropped) / Double(s.sent)))
+        }
+        return out
+    }
+}
+
+/// A red line on the main screens when a virtual camera that should be sending has stopped, so a
+/// pulled cable or a dead NDI output is seen from Operate and not only by opening Setup.
+struct VirtualCameraBanner: View {
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let faults = VirtualCameras.shared.all.compactMap { r -> String? in
+                let p = VirtualHealth.problems(r.status(), age: r.age)
+                return p.isEmpty ? nil : "\(r.camera.name): \(p.joined(separator: ", "))"
+            }
+            if !faults.isEmpty {
+                Text(faults.joined(separator: "  ·  "))
+                    .font(.sans(13, .semibold)).foregroundStyle(.white).lineLimit(2)
+                    .padding(.horizontal, T.s4).padding(.vertical, T.s2)
+                    .background(Capsule().fill(T.danger)).padding(.top, T.s3)
+                    .help("A virtual camera isn't sending. Details are in Status.")
+            }
+        }
+    }
+}
+
+/// Status page: one card for each virtual camera that is running.
+struct VirtualStatusSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: T.s3) {
+            Text("Virtual cameras").panelLabel()
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let cams = VirtualCameras.shared.all
+                if cams.isEmpty {
+                    Text("None running. Add or switch one on in Setup > Virtual cameras.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                } else {
+                    VStack(alignment: .leading, spacing: T.s3) {
+                        ForEach(Array(stride(from: 0, to: cams.count, by: 3)), id: \.self) { start in
+                            HStack(alignment: .top, spacing: T.s3) {
+                                ForEach(cams[start..<min(start + 3, cams.count)], id: \.camera.id) { r in
+                                    Card(title: r.camera.name) { rows(StatusReport.virtualRows(r).dropFirst()) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func rows(_ rows: ArraySlice<(String, String)>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: T.s3) {
+                    Text(row.0).font(.sans(12)).foregroundStyle(T.inkSubtle).frame(width: 90, alignment: .leading)
+                    Text(row.1).font(.sans(12)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+}

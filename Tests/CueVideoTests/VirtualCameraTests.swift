@@ -363,3 +363,36 @@ final class VirtualCameraSwitchTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(off)), off)
     }
 }
+
+final class VirtualHealthTests: XCTestCase {
+    private func status(live: Bool = true, problem: String? = nil, out: Bool = true, sent: Int = 1000, dropped: Int = 0,
+                        missing: Bool = false) -> VirtualCameraRuntime.Status {
+        VirtualCameraRuntime.Status(name: "A", ndiName: "A", input: "1920x1080 @ 50.00", captureLive: live, problem: problem,
+                                    outputLive: out, sent: sent, dropped: dropped, runtimeMissing: missing, mode: "follow",
+                                    shot: "waist", phase: "following", zoomLimited: false, maxZoom: 1.25, crop: .full)
+    }
+
+    func testHealthyCameraHasNoProblems() {
+        XCTAssertEqual(VirtualHealth.problems(status(), age: 60), [])
+    }
+
+    func testNothingIsReportedDuringTheFirstMoments() {
+        XCTAssertEqual(VirtualHealth.problems(status(live: false, out: false), age: 1), [])
+    }
+
+    func testALostPictureIsReportedWithItsReason() {
+        XCTAssertEqual(VirtualHealth.problems(status(live: false, problem: "Device disconnected", out: false), age: 30), ["Device disconnected"])
+        XCTAssertEqual(VirtualHealth.problems(status(live: false), age: 30), ["no picture from the capture device"])
+    }
+
+    func testNDIOutputProblems() {
+        XCTAssertEqual(VirtualHealth.problems(status(out: false), age: 30), ["not sending over NDI"])
+        XCTAssertEqual(VirtualHealth.problems(status(out: false, missing: true), age: 30), ["NDI isn't installed on this Mac"])
+    }
+
+    func testDroppedFramesAreReportedOnlyOnceEnoughHaveGoneOut() {
+        XCTAssertEqual(VirtualHealth.problems(status(sent: 1000, dropped: 100), age: 30), ["dropping frames (10%)"])
+        XCTAssertEqual(VirtualHealth.problems(status(sent: 100, dropped: 50), age: 30), [])
+        XCTAssertEqual(VirtualHealth.problems(status(sent: 1000, dropped: 40), age: 30), [])
+    }
+}

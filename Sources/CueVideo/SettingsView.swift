@@ -530,6 +530,7 @@ struct StatusTab: View {
                     }
                 }
             }
+            VirtualStatusSection()
             Card(title: "Commands sent to the switcher",
                  help: "Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed.") {
                 if atem.sentLog.isEmpty {
@@ -623,6 +624,19 @@ enum StatusReport {
         ]
     }
 
+    static func virtualRows(_ r: VirtualCameraRuntime) -> [(String, String)] {
+        let s = r.status()
+        let problems = VirtualHealth.problems(s, age: r.age)
+        return [
+            ("Camera", s.name),
+            ("Capture", s.captureLive ? "Receiving \(s.input)" : (s.problem ?? "Waiting for the picture")),
+            ("NDI output", s.runtimeMissing ? "NDI isn't installed on this Mac" : (s.outputLive ? "Sending as \(s.ndiName), \(s.sent) frames, \(s.dropped) dropped" : "Not sending")),
+            ("Steering", s.mode == "follow" ? "Follow (\(s.shot)), \(s.phase)" : s.mode),
+            ("Zoom", (s.maxZoom.map { String(format: "up to %.2f×", $0) } ?? "not known yet") + (s.zoomLimited ? ", at the limit" : "")),
+            ("Problem", problems.isEmpty ? "None" : problems.joined(separator: "; ")),
+        ]
+    }
+
     static func configRows(_ store: ConfigStore) -> [(String, String)] {
         [
             ("File", store.url.path),
@@ -637,6 +651,9 @@ enum StatusReport {
         out += switcherRows(b).map { "\($0.0): \($0.1)" }.joined(separator: "\n")
         out += "\n\nCAMERAS\n"
         out += b.ptz.cameras.map { c in cameraRows(c, b).map { "\($0.0): \($0.1)" }.joined(separator: "\n") }.joined(separator: "\n\n")
+        out += "\n\nVIRTUAL CAMERAS\n"
+        let virtuals = VirtualCameras.shared.all
+        out += virtuals.isEmpty ? "None running" : virtuals.map { r in virtualRows(r).map { "\($0.0): \($0.1)" }.joined(separator: "\n") }.joined(separator: "\n\n")
         out += "\n\nCOMMANDS SENT (newest first)\n"
         out += b.atem.sentLog.reversed().map { "\(time($0.time)) \($0.command) \($0.describe(b.atem.state))\($0.sent ? "" : " [not sent]")" }.joined(separator: "\n")
         out += "\n\nCONFIG\n" + configRows(b.store).map { "\($0.0): \($0.1)" }.joined(separator: "\n")

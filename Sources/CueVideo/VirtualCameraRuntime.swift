@@ -35,6 +35,10 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var detecting = false
     private var lastDetect = Date.distantPast
     private var started = false
+    private let createdAt = Date()
+
+    /// Seconds since this camera was set up: a picture that hasn't come yet is not a fault in the first moments.
+    var age: TimeInterval { Date().timeIntervalSince(createdAt) }
 
     /// The shot the follow mode frames now (the setup's, until changed while running).
     private(set) var shot: ShotSize

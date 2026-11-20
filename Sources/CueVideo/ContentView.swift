@@ -13,10 +13,10 @@ struct ContentView: View {
             if booth.view == .engineer {
                 // Reachable before the switcher is found too: Setup is where its address goes.
                 EngineerView()
-                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
+                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner(); VirtualCameraBanner() } }
             } else if booth.connectedOnce || atem.link == .online {
                 VolunteerView()
-                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner() } }
+                    .overlay(alignment: .top) { VStack(spacing: 0) { LinkBanner(); ConfigBanner(); VirtualCameraBanner() } }
             } else {
                 ConnectView()
             }
@@ -244,6 +244,7 @@ struct ConnectView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: T.s4) {
+            VirtualCameraBanner().frame(maxWidth: .infinity)
             switcherBar
             if let e = store.fileError {
                 Text("The setup file couldn't be read, so nothing from it is loaded: \(e)\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it.")
