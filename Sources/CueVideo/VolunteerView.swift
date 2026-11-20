@@ -20,6 +20,7 @@ struct VolunteerView: View {
                 }
                 .frame(maxHeight: .infinity)
                 SourceRow()
+                VirtualOperatorStrip()
             }
             .padding(T.s4)
             Rectangle().fill(T.line).frame(height: 1)

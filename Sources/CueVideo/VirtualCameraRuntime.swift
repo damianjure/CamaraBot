@@ -160,6 +160,34 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         let crop = motion.advance(to: ProcessInfo.processInfo.systemUptime)
         output.submit(pixels, crop: crop, fps: feed.frameRate)
         detectIfDue(pixels)
+        previewIfWanted(pixels)
+    }
+
+    // MARK: Preview (for the operator panel)
+
+    /// The width of the preview picture.
+    static let previewWidth = 480
+    private var previewImage: CGImage?
+    private var previewAsked = Date.distantPast
+    private var previewMade = Date.distantPast
+
+    /// The latest small copy of the full captured picture, or nil before the first one. Asking for
+    /// it is what turns the preview on: nobody looking means no extra work on the capture thread.
+    func preview() -> CGImage? {
+        lock.lock(); defer { lock.unlock() }
+        previewAsked = Date()
+        return previewImage
+    }
+
+    /// About five times a second, and only while the preview is being looked at.
+    private func previewIfWanted(_ pixels: CVPixelBuffer) {
+        let now = Date()
+        lock.lock()
+        let due = now.timeIntervalSince(previewAsked) < 2 && now.timeIntervalSince(previewMade) >= 0.2
+        if due { previewMade = now }
+        lock.unlock()
+        guard due, let image = FrameTools.thumbnail(pixels, width: Self.previewWidth) else { return }
+        lock.lock(); previewImage = image; lock.unlock()
     }
 
     /// The first frame (or a new input format) tells the real picture size: set the zoom limit
