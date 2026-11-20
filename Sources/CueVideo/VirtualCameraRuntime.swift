@@ -36,6 +36,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var lastDetect = Date.distantPast
     private var started = false
     private let createdAt = Date()
+    private var dropWindow = DropWindow()
 
     /// Seconds since this camera was set up: a picture that hasn't come yet is not a fault in the first moments.
     var age: TimeInterval { Date().timeIntervalSince(createdAt) }
@@ -59,7 +60,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func start() {
         guard !started else { return }
         started = true
-        _ = CaptureFeedHub.shared.retain(camera.device, name: camera.deviceName, preferred: camera.inputFormat)
+        CaptureFeedHub.shared.retain(feed)
         subscription = feed.subscribe { [weak self] pixels in self?.handle(pixels) }
     }
 
@@ -68,7 +69,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         started = false
         if let subscription { feed.unsubscribe(subscription) }
         subscription = nil
-        CaptureFeedHub.shared.release(camera.device)
+        CaptureFeedHub.shared.release(feed)
         output.close()
     }
 
@@ -87,6 +88,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     /// Never changes the mode or the crop it is in now.
     func update(_ cam: VirtualCamera, config: CueConfig) {
         let sizeChanged = cam.shotSize != camera.shotSize
+        // A name learned while running (see CaptureFeedHub.feed).
+        if cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
         camera = cam
         frame(as: sizeChanged ? cam.shot : nil, config: config)
     }
@@ -133,6 +136,9 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         var outputLive: Bool
         var sent: Int
         var dropped: Int
+        /// Within the last half minute (see DropWindow).
+        var recentSent = 0
+        var recentDropped = 0
         var runtimeMissing: Bool
         var mode: String
         var shot: String
@@ -150,9 +156,11 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         switch mode { case .follow: m = "follow"; case .hold: m = "hold"; case .wide: m = "wide"; case .shot: m = "shot" }
         let phase = follow.phase.rawValue, limited = follow.zoomLimited, zoom = geometry == nil ? nil : follow.planner.maxZoom
         let shot = self.shot.rawValue
+        let recent = dropWindow.add(now: Date(), sent: o.sent, dropped: o.dropped)
         lock.unlock()
         return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: feed.live, problem: feed.problem,
-                      outputLive: o.live, sent: o.sent, dropped: o.dropped, runtimeMissing: o.runtimeMissing,
+                      outputLive: o.live, sent: o.sent, dropped: o.dropped, recentSent: recent.sent, recentDropped: recent.dropped,
+                      runtimeMissing: o.runtimeMissing,
                       mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal)
     }
 

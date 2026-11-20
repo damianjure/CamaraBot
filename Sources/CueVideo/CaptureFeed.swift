@@ -23,7 +23,10 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
 
     let deviceID: String
     /// The device's name, to find it again when its ID changes (plugged into another USB port).
-    let deviceName: String?
+    /// It can be learned while running (a camera saved before names were kept).
+    var deviceName: String? { lock.lock(); defer { lock.unlock() }; return _deviceName }
+    private var _deviceName: String?
+    func learn(name: String?) { lock.lock(); _deviceName = name; lock.unlock() }
     /// Which format to ask for, as "3840x2160". Nil takes the largest the device offers.
     let preferred: String?
 
@@ -40,10 +43,14 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     private var size = (w: 0, h: 0)
     private var duration = CMTime(value: 1001, timescale: 30000)
     private var watchdog: DispatchSourceTimer?
+    /// The precise reason the last attempt to open the device failed (no permission, no format…).
+    /// Only the control queue touches it. The watchdog keeps showing it instead of its general
+    /// "sends no picture" line, which would hide what to fix.
+    private var openFailure: String?
 
     init(deviceID: String, deviceName: String? = nil, preferred: String? = nil) {
         self.deviceID = deviceID
-        self.deviceName = deviceName
+        self._deviceName = deviceName
         self.preferred = preferred
     }
 
@@ -158,22 +165,29 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         DispatchQueue.main.async { if self.problem != why { self.problem = why }; if why != nil { self.live = false } }
     }
 
+    /// A failure to open the device that has its own explanation.
+    private func failOpening(_ why: String) {
+        openFailure = why
+        fail(why)
+    }
+
     private func configureAndRun() {
         lastConfigure = Date()
+        openFailure = nil
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] ok in
                 guard let self else { return }
-                if ok { self.control.async { self.configureAndRun() } } else { self.fail("Camera access was refused. Allow it in System Settings > Privacy & Security > Camera.") }
+                if ok { self.control.async { self.configureAndRun() } } else { self.control.async { self.failOpening("Camera access was refused. Allow it in System Settings > Privacy & Security > Camera.") } }
             }
             return
         case .denied, .restricted:
-            fail("Camera access is off. Allow it in System Settings > Privacy & Security > Camera.")
+            failOpening("Camera access is off. Allow it in System Settings > Privacy & Security > Camera.")
             return
         default: break
         }
         guard let device = Self.device(deviceID, name: deviceName) else { fail("The capture device isn't connected, or isn't an external one."); return }
-        guard let format = Self.pick(device.formats, preferred: preferred) else { fail("The capture device offers no video format."); return }
+        guard let format = Self.pick(device.formats, preferred: preferred) else { failOpening("The capture device offers no video format."); return }
 
         if session.isRunning { session.stopRunning() }
         session.beginConfiguration()
@@ -181,11 +195,11 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         session.outputs.forEach { session.removeOutput($0) }
         do {
             let input = try AVCaptureDeviceInput(device: device)
-            guard session.canAddInput(input) else { session.commitConfiguration(); fail("The capture device can't be used."); return }
+            guard session.canAddInput(input) else { session.commitConfiguration(); failOpening("The capture device can't be used."); return }
             session.addInput(input)
         } catch {
             session.commitConfiguration()
-            fail("The capture device can't be opened: \(error.localizedDescription)")
+            failOpening("The capture device can't be opened: \(error.localizedDescription)")
             return
         }
         let output = AVCaptureVideoDataOutput()
@@ -194,7 +208,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         // Late frames are dropped, never queued: a virtual camera is always as live as it can be.
         output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(self, queue: frames)
-        guard session.canAddOutput(output) else { session.commitConfiguration(); fail("The capture device can't be used."); return }
+        guard session.canAddOutput(output) else { session.commitConfiguration(); failOpening("The capture device can't be used."); return }
         session.addOutput(output)
         session.commitConfiguration()
 
@@ -207,7 +221,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
             }
             device.unlockForConfiguration()
         } catch {
-            fail("The capture format can't be set: \(error.localizedDescription)")
+            failOpening("The capture format can't be set: \(error.localizedDescription)")
         }
         let d = Self.dims(format)
         lock.lock()
@@ -228,7 +242,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         if quiet > 2, live { DispatchQueue.main.async { self.live = false } }
         guard quiet > 3 else { return }
         let present = Self.device(deviceID, name: deviceName) != nil
-        if present { fail("The capture device is connected but sends no picture. Check that the camera is on and plugged into it.") }
+        if present { fail(openFailure ?? "The capture device is connected but sends no picture. Check that the camera is on and plugged into it.") }
         if now.timeIntervalSince(lastConfigure) > (present ? 10 : 3) { configureAndRun() }
     }
 
@@ -259,34 +273,43 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
 }
 
 /// One capture session per device, shared by every virtual camera that uses it, running only
-/// while something needs it (the same pattern as NDIFeedHub).
+/// while something needs it (the same pattern as NDIFeedHub). Feeds are kept by the device they
+/// really open, so two cameras that reach the same device (one by its saved ID, one by its name
+/// after a port change) share a single session instead of opening it twice.
 final class CaptureFeedHub {
     static let shared = CaptureFeedHub()
     private var feeds: [String: CaptureFeed] = [:]
-    private var users: [String: Int] = [:]
+    private var users: [ObjectIdentifier: Int] = [:]
 
-    /// The feed for a device. `preferred` is used only when the feed is first made.
+    /// The feed for a device. `preferred` is used only when the feed is first made; a name given
+    /// later is passed on to the feed that exists, so a camera that learns its device's name
+    /// finds it again after a port change without a restart.
     func feed(_ id: String, name: String? = nil, preferred: String? = nil) -> CaptureFeed {
-        if let f = feeds[id] { return f }
-        let f = CaptureFeed(deviceID: id, deviceName: name, preferred: preferred)
-        feeds[id] = f
+        let key = CaptureFeed.resolve(id: id, name: name, among: CaptureFeed.devices().map { ($0.id, $0.name) }) ?? id
+        if let f = feeds[key] {
+            if let name, f.deviceName != name { f.learn(name: name) }
+            return f
+        }
+        let f = CaptureFeed(deviceID: key, deviceName: name, preferred: preferred)
+        feeds[key] = f
         return f
     }
 
-    func retain(_ id: String, name: String? = nil, preferred: String? = nil) -> CaptureFeed {
-        let f = feed(id, name: name, preferred: preferred)
-        users[id, default: 0] += 1
-        if users[id] == 1 { f.start() }
-        return f
+    @discardableResult
+    func retain(_ feed: CaptureFeed) -> CaptureFeed {
+        users[ObjectIdentifier(feed), default: 0] += 1
+        if users[ObjectIdentifier(feed)] == 1 { feed.start() }
+        return feed
     }
 
-    func release(_ id: String) {
-        guard let n = users[id] else { return }
-        if n <= 1 { users[id] = nil; feeds[id]?.stop(); feeds[id] = nil } else { users[id] = n - 1 }
+    func release(_ feed: CaptureFeed) {
+        let k = ObjectIdentifier(feed)
+        guard let n = users[k] else { return }
+        if n > 1 { users[k] = n - 1; return }
+        users[k] = nil
+        feed.stop()
+        if let key = feeds.first(where: { $0.value === feed })?.key { feeds[key] = nil }
     }
-
-    /// For status: whether a device's picture is coming in (nil when nothing is using it).
-    func isLive(_ id: String) -> Bool? { users[id] == nil ? nil : feeds[id]?.live }
 }
 
 /// Turning full-size captured frames into small pictures for detection and previews.

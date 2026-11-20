@@ -4,9 +4,11 @@ import SwiftUI
 enum VirtualHealth {
     /// Seconds after a camera starts before a missing picture counts as a fault.
     static let grace = 4.0
-    /// The share of sent frames dropped before it is worth saying, once enough have gone out.
+    /// The share of recently sent frames dropped before it is worth saying, once enough have gone out.
     static let dropShare = 0.05
     static let dropSample = 300
+    /// How far back "recently" reaches, in seconds.
+    static let dropWindow = 30.0
 
     /// Empty when all is well.
     static func problems(_ s: VirtualCameraRuntime.Status, age: TimeInterval) -> [String] {
@@ -17,10 +19,27 @@ enum VirtualHealth {
             out.append("NDI isn't installed on this Mac")
         } else if s.captureLive, !s.outputLive {
             out.append("not sending over NDI")
-        } else if s.sent >= dropSample, Double(s.dropped) / Double(s.sent) > dropShare {
-            out.append(String(format: "dropping frames (%.0f%%)", 100 * Double(s.dropped) / Double(s.sent)))
+        } else if s.recentSent >= dropSample, Double(s.recentDropped) / Double(s.recentSent) > dropShare {
+            out.append(String(format: "dropping frames (%.0f%%)", 100 * Double(s.recentDropped) / Double(s.recentSent)))
         }
         return out
+    }
+}
+
+/// Frames sent and dropped over the last `VirtualHealth.dropWindow` seconds, from counters that
+/// only ever grow. A burst at start-up stops counting once it is older than the window, and a new
+/// problem shows up without waiting for a whole run's worth of good frames to be outweighed.
+struct DropWindow {
+    private var samples: [(time: Date, sent: Int, dropped: Int)] = []
+
+    /// Records the counters as they are now and returns what happened within the window.
+    mutating func add(now: Date, sent: Int, dropped: Int) -> (sent: Int, dropped: Int) {
+        if let last = samples.last, sent < last.sent || dropped < last.dropped { samples.removeAll() }  // counters restarted
+        samples.append((now, sent, dropped))
+        // Keep one sample at or before the window's start, so the span covers the whole window.
+        while samples.count > 2, now.timeIntervalSince(samples[1].time) >= VirtualHealth.dropWindow { samples.removeFirst() }
+        guard let first = samples.first else { return (0, 0) }
+        return (sent - first.sent, dropped - first.dropped)
     }
 }
 

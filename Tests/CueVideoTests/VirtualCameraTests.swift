@@ -368,7 +368,7 @@ final class VirtualHealthTests: XCTestCase {
     private func status(live: Bool = true, problem: String? = nil, out: Bool = true, sent: Int = 1000, dropped: Int = 0,
                         missing: Bool = false) -> VirtualCameraRuntime.Status {
         VirtualCameraRuntime.Status(name: "A", ndiName: "A", input: "1920x1080 @ 50.00", captureLive: live, problem: problem,
-                                    outputLive: out, sent: sent, dropped: dropped, runtimeMissing: missing, mode: "follow",
+                                    outputLive: out, sent: sent, dropped: dropped, recentSent: sent, recentDropped: dropped, runtimeMissing: missing, mode: "follow",
                                     shot: "waist", phase: "following", zoomLimited: false, maxZoom: 1.25, crop: .full)
     }
 
@@ -425,5 +425,54 @@ final class CaptureDeviceMatchTests: XCTestCase {
         let back = try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam))
         XCTAssertEqual(back.deviceName, "ZV-E10M2")
         XCTAssertNil(try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"0xA","ndiName":"n"}"#.utf8)).deviceName)
+    }
+}
+
+final class DropWindowTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+    func testItCountsOnlyWhatHappenedWithinTheWindow() {
+        var w = DropWindow()
+        // A burst of drops at the start...
+        _ = w.add(now: t0, sent: 0, dropped: 0)
+        _ = w.add(now: t0.addingTimeInterval(5), sent: 300, dropped: 150)
+        // ...then a long healthy run: once the window has moved past the burst it no longer counts.
+        var last = (sent: 0, dropped: 0)
+        for s in stride(from: 10, through: 120, by: 5) {
+            last = w.add(now: t0.addingTimeInterval(Double(s)), sent: 300 + (s - 5) * 50, dropped: 150)
+        }
+        XCTAssertEqual(last.dropped, 0)
+        XCTAssertGreaterThan(last.sent, 1000)
+    }
+
+    func testANewProblemShowsUpAfterALongHealthyRun() {
+        var w = DropWindow()
+        for s in 0...100 { _ = w.add(now: t0.addingTimeInterval(Double(s)), sent: s * 50, dropped: 0) }
+        var last = (sent: 0, dropped: 0)
+        for s in 101...130 { last = w.add(now: t0.addingTimeInterval(Double(s)), sent: s * 50, dropped: (s - 100) * 10) }
+        XCTAssertGreaterThan(Double(last.dropped) / Double(last.sent), VirtualHealth.dropShare)
+    }
+
+    func testRestartedCountersStartAgain() {
+        var w = DropWindow()
+        _ = w.add(now: t0, sent: 5000, dropped: 400)
+        let r = w.add(now: t0.addingTimeInterval(1), sent: 10, dropped: 0)
+        XCTAssertEqual(r.sent, 0)
+        XCTAssertEqual(r.dropped, 0)
+    }
+}
+
+final class CaptureFeedHubTests: XCTestCase {
+    func testTheSameDeviceSharesOneFeedAndLearnsItsName() {
+        let hub = CaptureFeedHub()
+        let a = hub.feed("no-such-device")
+        let b = hub.feed("no-such-device", name: "ZV-E10M2")
+        XCTAssertTrue(a === b)
+        XCTAssertEqual(a.deviceName, "ZV-E10M2")
+    }
+
+    func testAnotherDeviceGetsItsOwnFeed() {
+        let hub = CaptureFeedHub()
+        XCTAssertFalse(hub.feed("no-such-device-1") === hub.feed("no-such-device-2"))
     }
 }
