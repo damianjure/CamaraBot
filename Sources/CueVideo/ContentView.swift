@@ -226,46 +226,82 @@ struct ConfigBanner: View {
         }
     }
 }
-
+/// Operate with no switcher: the virtual cameras come first, and connecting an ATEM is one
+/// collapsed bar at the top that opens only when it is wanted.
 struct ConnectView: View {
     @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var atem: ATEMClient
     @State private var host = Booth.shared.store.config.atemHost
+    @State private var open = false
+
+    private var status: (text: String, color: Color) {
+        switch atem.link {
+        case .connecting: return ("Connecting to \(atem.host)…", T.warning)
+        case .offline(let why): return (why, T.danger)
+        default: return ("Not connected", T.inkSubtle)
+        }
+    }
 
     var body: some View {
-        VStack(spacing: T.s4) {
-            Spacer()
-            Text("Connect to your ATEM").font(.sans(26, .bold))
-            Text("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed.\nFind the switcher's IP address in ATEM Setup under Network.")
-                .font(.sans(14)).foregroundStyle(T.inkMuted).multilineTextAlignment(.center)
-            HStack {
-                TextField("Such as 192.168.1.240", text: $host)
-                    .textFieldStyle(.plain).font(.sans(16))
-                    .padding(.horizontal, T.s3).frame(width: 260, height: 40)
-                    .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
-                    .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
-                    .onSubmit(go)
-                Button(action: go) {
-                    Text("Connect").font(.sans(15, .bold)).foregroundStyle(T.onAction)
-                        .padding(.horizontal, T.s5).frame(height: 40)
-                        .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.accent))
-                }.buttonStyle(.plain)
-            }
+        VStack(alignment: .leading, spacing: T.s4) {
+            switcherBar
             if let e = store.fileError {
                 Text("The setup file couldn't be read, so nothing from it is loaded: \(e)\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it.")
-                    .foregroundStyle(T.warning).multilineTextAlignment(.center).frame(maxWidth: 560)
+                    .foregroundStyle(T.warning)
             }
-            switch atem.link {
-            case .connecting: Text("Connecting to \(atem.host)…").foregroundStyle(T.warning)
-            case .offline(let why): Text(why).foregroundStyle(T.danger)
-            default: EmptyView()
+            if store.config.virtualCameras.contains(where: \.enabled) {
+                ScrollView { VirtualOperatorStrip(large: true) }
+            } else {
+                VStack(spacing: T.s2) {
+                    Text("No virtual cameras yet").font(.sans(16, .semibold))
+                    Text("Add one in Setup > Virtual cameras to follow a person with a fixed camera and send it out over NDI.")
+                        .font(.sans(13)).foregroundStyle(T.inkMuted).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            Spacer()
-            // The virtual cameras don't need a switcher: they are steered here with or without one.
-            VirtualOperatorStrip().padding(T.s4)
         }
         .font(.sans(14))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(T.s4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// One line while closed; the address and Connect once opened.
+    private var switcherBar: some View {
+        VStack(alignment: .leading, spacing: T.s3) {
+            Button { withAnimation(.easeOut(duration: 0.15)) { open.toggle() } } label: {
+                HStack(spacing: T.s3) {
+                    Image(systemName: "switch.2").foregroundStyle(T.inkMuted)
+                    Text("ATEM switcher").font(.sans(13, .semibold))
+                    Text(status.text).font(.sans(12)).foregroundStyle(status.color).lineLimit(1)
+                    Spacer()
+                    Text(open ? "Close" : "Connect").font(.sans(12, .semibold)).foregroundStyle(T.inkMuted)
+                    Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(T.inkMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if open {
+                Text("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed. Find the switcher's IP address in ATEM Setup under Network.")
+                    .font(.sans(12)).foregroundStyle(T.inkMuted)
+                HStack {
+                    TextField("Such as 192.168.1.240", text: $host)
+                        .textFieldStyle(.plain).font(.sans(15))
+                        .padding(.horizontal, T.s3).frame(width: 260, height: 36)
+                        .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
+                        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
+                        .onSubmit(go)
+                    Button(action: go) {
+                        Text("Connect").font(.sans(14, .bold)).foregroundStyle(T.onAction)
+                            .padding(.horizontal, T.s5).frame(height: 36)
+                            .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.accent))
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(T.s3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surface))
+        .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(T.line))
     }
 
     func go() {
