@@ -26,6 +26,24 @@ enum VirtualHealth {
     }
 }
 
+extension VirtualCameraRuntime.Status {
+    /// What the camera is doing, in words for the operator: used by the operator tile and by Setup.
+    var steeringText: String {
+        switch mode {
+        case "follow":
+            switch phase {
+            case "following": return "Following a person"
+            case "searching": return "Looking for them"
+            case "lost": return "Lost sight, showing the whole picture"
+            default: return "Waiting for someone in the picture"
+            }
+        case "wide": return "Wide"
+        case "hold": return "Held"
+        default: return "At a saved shot"
+        }
+    }
+}
+
 /// Frames sent and dropped over the last `VirtualHealth.dropWindow` seconds, from counters that
 /// only ever grow. A burst at start-up stops counting once it is older than the window, and a new
 /// problem shows up without waiting for a whole run's worth of good frames to be outweighed.

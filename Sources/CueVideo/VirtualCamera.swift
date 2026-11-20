@@ -1,5 +1,12 @@
 import Foundation
 
+extension ShotSize {
+    /// A shot named by a person or a tool: any case, spaces around it ignored. Nil when unknown.
+    static func named(_ name: String) -> ShotSize? {
+        ShotSize(rawValue: name.trimmingCharacters(in: .whitespaces).lowercased())
+    }
+}
+
 /// A saved framing of a virtual camera, like a PTZ shot: a crop of the captured picture.
 struct CropShot: Codable, Hashable, Identifiable {
     var id = UUID()
@@ -34,6 +41,9 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     var device: String
     /// The device's name when it was chosen: if its ID changes (another USB port) the one device with this name is used.
     var deviceName: String?
+    /// An NDI source to take the picture from instead of a capture device, such as the camera as
+    /// vMix or a switcher sends it: "COMPUTER (Channel)". Nil (or empty) uses the capture device.
+    var ndiSource: String?
     /// Which format to ask the device for, as "3840x2160". Nil takes the largest it offers.
     var inputFormat: String?
     var output: OutputSize = .p1080
@@ -55,15 +65,16 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Virtual camera"
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-        device = try c.decode(String.self, forKey: .device)
+        device = try c.decodeIfPresent(String.self, forKey: .device) ?? ""
         deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName)
+        ndiSource = try c.decodeIfPresent(String.self, forKey: .ndiSource)
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080
         ndiName = try c.decodeIfPresent(String.self, forKey: .ndiName) ?? name
@@ -73,12 +84,29 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         atemInput = try c.decodeIfPresent(Int.self, forKey: .atemInput)
     }
 
+    /// The NDI source in use, when the picture comes over NDI.
+    var inputSource: String? { ndiSource.flatMap { $0.isEmpty ? nil : $0 } }
+
+    /// Taking its own output as its input would feed it back on itself: the picture it sends is
+    /// the channel it would receive. Compared by channel, since the computer half of an NDI name varies.
+    var inputIsOwnOutput: Bool {
+        guard let source = inputSource, let channel = NDIFeed.channel(source) else { return false }
+        return channel.lowercased() == ndiName.lowercased()
+    }
+
     var shot: ShotSize { ShotSize(rawValue: shotSize) ?? .waist }
+
+    /// The manual zoom limit the setup starts from: what the automatic limit gives for a 4K input
+    /// sent out at 1080p (see CropPlanner.maxZoom).
+    static let manualZoomDefault = CropPlanner.maxZoom(inputHeight: 2160, outputHeight: 1080)
+    /// What the manual zoom slider allows: 1x is the whole picture, and 4x is just past the
+    /// automatic limit for a 4K input sent out at 720p (3.75x).
+    static let manualZoomRange = 1.0...4.0
 
     /// Whatever can only change by reopening the capture and the NDI output. A change to anything
     /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
     /// shot never drops a source that may be on air.
     var pipeline: String {
-        [device, inputFormat ?? "", output.rawValue, ndiName, maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+        [device, inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, maxZoom.map { String($0) } ?? ""].joined(separator: "|")
     }
 }

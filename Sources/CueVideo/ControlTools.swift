@@ -192,7 +192,7 @@ enum ControlTools {
             let r = try virtual(a)
             var size: ShotSize?
             if let name = a["shot"] as? String {
-                guard let s = ShotSize(rawValue: name.lowercased()) else { throw fail("Unknown shot \(name). Use shoulders, waist or full.") }
+                guard let s = ShotSize.named(name) else { throw fail("Unknown shot \(name). Use shoulders, waist or full.") }
                 size = s
             }
             r.frame(as: size, config: store.config)

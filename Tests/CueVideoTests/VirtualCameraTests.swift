@@ -476,3 +476,92 @@ final class CaptureFeedHubTests: XCTestCase {
         XCTAssertFalse(hub.feed("no-such-device-1") === hub.feed("no-such-device-2"))
     }
 }
+
+final class VirtualCameraSmallPartsTests: XCTestCase {
+    func testAShotNameIsReadInAnyCase() {
+        XCTAssertEqual(ShotSize.named("Waist"), .waist)
+        XCTAssertEqual(ShotSize.named(" SHOULDERS "), .shoulders)
+        XCTAssertEqual(ShotSize.named("full"), .full)
+        XCTAssertNil(ShotSize.named("closeup"))
+    }
+
+    func testFourKIsDecidedByTheHeightNotTheText() {
+        XCTAssertEqual(CaptureFeed.height(of: "3840x2160"), 2160)
+        XCTAssertEqual(CaptureFeed.height(of: "4096x2160"), 2160)
+        XCTAssertEqual(CaptureFeed.height(of: "1920x1080"), 1080)
+        XCTAssertEqual(CaptureFeed.height(of: "nonsense"), 0)
+    }
+
+    func testTheManualZoomStartsAtTheAutomaticFourKLimit() {
+        XCTAssertEqual(VirtualCamera.manualZoomDefault, 2.5, accuracy: 0.001)
+        XCTAssertTrue(VirtualCamera.manualZoomRange.contains(VirtualCamera.manualZoomDefault))
+    }
+}
+
+final class NDIInputTests: XCTestCase {
+    func testAnNDISourceNeedsNoDeviceInTheSetup() throws {
+        let cam = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"ndiSource":"PC (vMix - Cam)","ndiName":"Tracked"}"#.utf8))
+        XCTAssertEqual(cam.inputSource, "PC (vMix - Cam)")
+        XCTAssertEqual(cam.device, "")
+        let back = try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam))
+        XCTAssertEqual(back.ndiSource, "PC (vMix - Cam)")
+    }
+
+    func testAnEmptySourceMeansTheCaptureDevice() {
+        var cam = VirtualCamera(device: "0xA", ndiName: "n")
+        cam.ndiSource = ""
+        XCTAssertNil(cam.inputSource)
+    }
+
+    func testChangingTheInputReopensThePipeline() {
+        var a = VirtualCamera(device: "0xA", ndiName: "n")
+        let before = a.pipeline
+        a.ndiSource = "PC (vMix)"
+        XCTAssertNotEqual(a.pipeline, before)
+    }
+
+    func testACameraTakingItsOwnOutputIsCaught() {
+        var cam = VirtualCamera(device: "", ndiName: "Tracked")
+        cam.ndiSource = "MAC (Tracked)"
+        XCTAssertTrue(cam.inputIsOwnOutput)
+        cam.ndiSource = "mac-2.local (tracked)"
+        XCTAssertTrue(cam.inputIsOwnOutput)
+        cam.ndiSource = "PC (vMix - Cam 1)"
+        XCTAssertFalse(cam.inputIsOwnOutput)
+        cam.ndiSource = "no channel"
+        XCTAssertFalse(cam.inputIsOwnOutput)
+    }
+
+    func testARunningCameraFedByItsOwnOutputStaysClosedAndSaysWhy() {
+        var cam = VirtualCamera(device: "", ndiName: "Tracked")
+        cam.ndiSource = "MAC (Tracked)"
+        let r = VirtualCameraRuntime(cam, config: CueConfig())
+        r.start()
+        let s = r.status()
+        XCTAssertFalse(s.captureLive)
+        XCTAssertTrue(s.problem?.contains("own NDI output") ?? false)
+        r.stop()
+    }
+
+    func testFramesAreCopiedRowByRowWhateverTheStride() throws {
+        // 3x2 pixels in rows of 16 bytes: 12 of picture and 4 of padding that must not come across.
+        var src = [UInt8](repeating: 0xEE, count: 32)
+        for row in 0..<2 { for i in 0..<12 { src[row * 16 + i] = UInt8(row * 12 + i + 1) } }
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 3, 2, kCVPixelFormatType_32BGRA, nil, &buffer)
+        let b = try XCTUnwrap(buffer)
+        XCTAssertTrue(src.withUnsafeBufferPointer { NDIInputFeed.fill(b, from: $0.baseAddress!, 3, 2, 16) })
+        CVPixelBufferLockBaseAddress(b, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(b, .readOnly) }
+        let base = try XCTUnwrap(CVPixelBufferGetBaseAddress(b)).assumingMemoryBound(to: UInt8.self)
+        let stride = CVPixelBufferGetBytesPerRow(b)
+        for row in 0..<2 { for i in 0..<12 { XCTAssertEqual(base[row * stride + i], UInt8(row * 12 + i + 1)) } }
+    }
+
+    func testAFrameWithATooSmallStrideIsRefused() throws {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 4, 1, kCVPixelFormatType_32BGRA, nil, &buffer)
+        let src = [UInt8](repeating: 0, count: 16)
+        XCTAssertFalse(src.withUnsafeBufferPointer { NDIInputFeed.fill(try! XCTUnwrap(buffer), from: $0.baseAddress!, 4, 1, 8) })
+    }
+}

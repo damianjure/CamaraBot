@@ -14,7 +14,7 @@ struct CaptureDeviceInfo: Equatable {
 /// The live picture of one USB capture device (an `AVCaptureSession`). Full resolution frames go
 /// to whoever subscribed, straight from the capture thread; nothing here copies or converts them.
 /// It reconnects by itself when the device is unplugged and plugged back in.
-final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+final class CaptureFeed: NSObject, ObservableObject, VideoInput, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
     @Published private(set) var live = false
     /// Why there is no picture, when there isn't one (no permission, device missing).
     @Published private(set) var problem: String?
@@ -231,6 +231,18 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         session.startRunning()
     }
 
+    /// Seconds without a frame before the picture is called stopped.
+    private static let staleAfter = 2.0
+    /// Seconds without a frame before the watchdog does anything about it.
+    private static let actAfter = 3.0
+    /// Seconds between attempts to open the device again: quick while it is missing (so a re-plug
+    /// is picked up fast), slow while it is there but silent (so it isn't reopened over and over).
+    private static let retryAbsent = 3.0
+    private static let retryPresent = 10.0
+
+    /// The height of a size written "3840x2160", or 0 when it can't be read.
+    static func height(of size: String) -> Int { size.split(separator: "x").compactMap { Int($0) }.last ?? 0 }
+
     /// Every two seconds: say the picture stopped when frames stop, and open the device again
     /// when it has been gone for a while (unplugged and plugged back in). A device that is there
     /// but sends nothing (nothing plugged into the box) is not reopened over and over: it gets a
@@ -239,11 +251,11 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         guard wanted else { return }
         let now = Date()
         let quiet = now.timeIntervalSince(lastFrame)
-        if quiet > 2, live { DispatchQueue.main.async { self.live = false } }
-        guard quiet > 3 else { return }
+        if quiet > Self.staleAfter, live { DispatchQueue.main.async { self.live = false } }
+        guard quiet > Self.actAfter else { return }
         let present = Self.device(deviceID, name: deviceName) != nil
         if present { fail(openFailure ?? "The capture device is connected but sends no picture. Check that the camera is on and plugged into it.") }
-        if now.timeIntervalSince(lastConfigure) > (present ? 10 : 3) { configureAndRun() }
+        if now.timeIntervalSince(lastConfigure) > (present ? Self.retryPresent : Self.retryAbsent) { configureAndRun() }
     }
 
     // MARK: Frames

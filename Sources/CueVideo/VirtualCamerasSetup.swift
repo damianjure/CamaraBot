@@ -11,7 +11,7 @@ struct VirtualCamerasSetup: View {
         VStack(alignment: .leading, spacing: T.s4) {
             if store.config.virtualCameras.isEmpty {
                 Card {
-                    Text(devices.isEmpty ? "No capture device found. Plug in the capture box, then press Refresh devices."
+                    Text(devices.isEmpty ? "No virtual cameras yet. Add one, then pick a capture device (plug in the capture box and press Refresh devices) or an NDI source."
                                          : "No virtual cameras yet. Add one to start.")
                         .font(.sans(13)).foregroundStyle(T.inkMuted)
                 }
@@ -22,7 +22,7 @@ struct VirtualCamerasSetup: View {
             }
             HStack(spacing: T.s2) {
                 Button { add() } label: { Label("Add a virtual camera", systemImage: "plus") }
-                    .buttonStyle(CueButton(kind: .primary)).disabled(devices.isEmpty)
+                    .buttonStyle(CueButton(kind: .primary))
                 Button { devices = CaptureFeed.devices() } label: { Label("Refresh devices", systemImage: "arrow.clockwise") }
                     .buttonStyle(CueButton())
                 Text("\(devices.count) capture device\(devices.count == 1 ? "" : "s") found").font(.sans(12)).foregroundStyle(T.inkSubtle)
@@ -33,16 +33,20 @@ struct VirtualCamerasSetup: View {
         .onAppear { devices = CaptureFeed.devices() }
     }
 
+    /// With a capture device plugged in it starts on that; with none it starts on an NDI source to choose.
     private func add() {
-        guard let d = devices.first else { return }
         let n = store.config.virtualCameras.count + 1
         store.update {
-            var cam = VirtualCamera(name: "Virtual camera \(n)", device: d.id, ndiName: "Virtual camera \(n)")
-            cam.deviceName = d.name
+            var cam = VirtualCamera(name: "Virtual camera \(n)", device: devices.first?.id ?? "", ndiName: "Virtual camera \(n)")
+            cam.deviceName = devices.first?.name
+            if devices.isEmpty { cam.ndiSource = "" }
             $0.virtualCameras.append(cam)
         }
     }
 }
+
+/// Where a virtual camera's picture comes from.
+private enum InputKind: Hashable { case usb, ndi }
 
 struct VirtualCameraCard: View {
     let cam: VirtualCamera
@@ -50,12 +54,13 @@ struct VirtualCameraCard: View {
     @EnvironmentObject var store: ConfigStore
     @State private var nameDraft = ""
     @State private var ndiDraft = ""
-    @State private var zoomDraft = 2.5
+    @State private var zoomDraft = VirtualCamera.manualZoomDefault
     @FocusState private var focus: Field?
     private enum Field { case name, ndi }
 
-    /// Changes this camera in the setup. Anything that doesn't need the capture reopened (the name,
-    /// shot size, saved shots) is applied to the running camera without a gap in the picture.
+    /// Changes this camera in the setup. Whether the running camera is reopened is decided by
+    /// VirtualCameras.apply from `VirtualCamera.pipeline`: only the device, input size, output size,
+    /// NDI name and zoom limit do; anything else (name, shot size, saved shots) leaves the picture running.
     private func edit(_ change: @escaping (inout VirtualCamera) -> Void) {
         store.update { c in
             if let i = c.virtualCameras.firstIndex(where: { $0.id == cam.id }) { change(&c.virtualCameras[i]) }
@@ -101,27 +106,51 @@ struct VirtualCameraCard: View {
                 IconButton(icon: "trash", help: "Remove \(cam.name)") { store.update { $0.virtualCameras.removeAll { $0.id == cam.id } } }
             }
 
-            labeled("Capture device") {
-                MenuField(text: device?.name ?? "Not found", width: 260) {
-                    ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.deviceName = d.name; $0.inputFormat = nil } } }
-                }
-                if device == nil { note("Plug it in, then Refresh devices.") }
+            // Where the picture comes from: a USB capture device, or an NDI source on the network
+            // (the camera as vMix or a switcher sends it).
+            labeled("Input") {
+                Segments(items: [("USB capture", InputKind.usb), ("NDI source", InputKind.ndi)],
+                         selection: Binding(
+                            get: { cam.ndiSource == nil ? .usb : .ndi },
+                            set: { kind in edit { $0.ndiSource = kind == .ndi ? ($0.ndiSource ?? "") : nil; $0.inputFormat = nil } }))
             }
 
-            labeled("Input quality") {
-                Toggle("", isOn: Binding(
-                    get: { cam.inputFormat == nil },
-                    set: { auto in edit { $0.inputFormat = auto ? nil : (sizes.first ?? "1920x1080") } }))
-                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                note(cam.inputFormat == nil ? "Automatic: the largest picture the device gives." : "Chosen by hand:")
-                if cam.inputFormat != nil {
-                    MenuField(text: cam.inputFormat ?? "", width: 140) {
-                        ForEach(sizes, id: \.self) { s in Button(label(for: s)) { edit { $0.inputFormat = s } } }
+            if cam.ndiSource == nil {
+                labeled("Capture device") {
+                    MenuField(text: device?.name ?? "Not found", width: 260) {
+                        ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.deviceName = d.name; $0.inputFormat = nil } } }
+                    }
+                    if device == nil { note("Plug it in, then Refresh devices.") }
+                }
+
+                labeled("Input quality") {
+                    Toggle("", isOn: Binding(
+                        get: { cam.inputFormat == nil },
+                        set: { auto in edit { $0.inputFormat = auto ? nil : (sizes.first ?? "1920x1080") } }))
+                        .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                    note(cam.inputFormat == nil ? "Automatic: the largest picture the device gives." : "Chosen by hand:")
+                    if cam.inputFormat != nil {
+                        MenuField(text: cam.inputFormat ?? "", width: 140) {
+                            ForEach(sizes, id: \.self) { s in Button(label(for: s)) { edit { $0.inputFormat = s } } }
+                        }
                     }
                 }
-            }
-            if !sizes.isEmpty, sizes.allSatisfy({ !$0.hasPrefix("3840") }) {
-                labeled("") { note("This device gives no 4K over USB, only up to \(sizes.first ?? "1080p"). Zoom range will be small.") }
+                if !sizes.isEmpty, sizes.allSatisfy({ CaptureFeed.height(of: $0) < 2160 }) {
+                    labeled("") { note("This device gives no 4K over USB, only up to \(sizes.first ?? "1080p"). Zoom range will be small.") }
+                }
+            } else {
+                labeled("NDI source") {
+                    NDIPicker(selection: cam.ndiSource.flatMap { $0.isEmpty ? nil : $0 }, none: "Choose a source") { v in
+                        edit { $0.ndiSource = v ?? "" }
+                    }
+                    .frame(width: 260)
+                }
+                labeled("") {
+                    note(cam.inputIsOwnOutput
+                         ? "This is this camera's own output. Pick the one your switcher or vMix sends."
+                         : "The full picture is taken over the network, so a wired connection works best. The zoom range follows what the sender gives.")
+                        .foregroundStyle(cam.inputIsOwnOutput ? T.warning : T.inkSubtle)
+                }
             }
 
             labeled("Output size") {
@@ -150,7 +179,7 @@ struct VirtualCameraCard: View {
                 if cam.maxZoom == nil {
                     note("Automatic: worked out from the input and output sizes.")
                 } else {
-                    Slider(value: $zoomDraft, in: 1...4, step: 0.25) { editing in
+                    Slider(value: $zoomDraft, in: VirtualCamera.manualZoomRange, step: 0.25) { editing in
                         if !editing { edit { $0.maxZoom = zoomDraft } }
                     }.frame(width: 180)
                     Text(String(format: "%.2f×", zoomDraft)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted)
@@ -161,7 +190,7 @@ struct VirtualCameraCard: View {
             if cam.enabled { LiveStatus(id: cam.id, ndiName: cam.ndiName) } else { note("Switched off.") }
         }
         .onAppear {
-            nameDraft = cam.name; ndiDraft = cam.ndiName; zoomDraft = cam.maxZoom ?? 2.5
+            nameDraft = cam.name; ndiDraft = cam.ndiName; zoomDraft = cam.maxZoom ?? VirtualCamera.manualZoomDefault
             // A camera saved before names were kept learns its device's name while the device is here.
             if cam.deviceName == nil, let d = device { edit { $0.deviceName = d.name } }
         }
@@ -208,13 +237,13 @@ private struct LiveStatus: View {
                     row("Capture", ok: s.captureLive, text: s.captureLive ? "Receiving \(s.input)" : (s.problem ?? "Waiting for the picture"))
                     row("NDI output", ok: s.outputLive,
                         text: s.runtimeMissing ? "NDI isn't installed on this Mac. Install NDI Tools."
-                              : (s.outputLive ? "Sending, \(s.sent) frames, \(s.dropped) dropped" : "Not sending"))
+                              : (s.outputLive ? "Sending as \"\(ndiName)\", \(s.sent) frames, \(s.dropped) dropped" : "Not sending"))
                     HStack(spacing: T.s2) {
                         Text("Steering").font(.sans(12, .semibold)).foregroundStyle(T.inkMuted).frame(width: 130, alignment: .leading)
                         steer("Follow", active: s.mode == "follow") { r.followPerson() }
                         steer("Wide", active: s.mode == "wide") { r.wide() }
                         steer("Hold", active: s.mode == "hold") { r.hold() }
-                        Text(s.mode == "follow" ? followText(s.phase) : s.mode == "shot" ? "At a saved shot" : "").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                        Text(s.mode == "follow" || s.mode == "shot" ? s.steeringText : "").font(.sans(12)).foregroundStyle(T.inkSubtle)
                     }
                     if s.zoomLimited {
                         Text("Zoom limit reached: the picture can't get any tighter for this shot at this input size.")
@@ -227,15 +256,6 @@ private struct LiveStatus: View {
                     Text("Starting…").font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
-        }
-    }
-
-    private func followText(_ phase: String) -> String {
-        switch phase {
-        case "following": return "Following a person"
-        case "searching": return "Looking for them"
-        case "lost": return "Lost sight, showing the whole picture"
-        default: return "Waiting for someone in the picture"
         }
     }
 

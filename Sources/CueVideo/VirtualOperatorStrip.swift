@@ -106,18 +106,7 @@ struct VirtualOperatorTile: View {
     private func statusText(_ s: VirtualCameraRuntime.Status?) -> String {
         guard let s else { return "Starting…" }
         if !s.captureLive { return s.problem ?? "No picture" }
-        switch s.mode {
-        case "follow":
-            switch s.phase {
-            case "following": return "Following a person"
-            case "searching": return "Looking for them"
-            case "lost": return "Lost sight, showing the whole picture"
-            default: return "Waiting for someone"
-            }
-        case "wide": return "Wide"
-        case "hold": return "Held"
-        default: return "At a saved shot"
-        }
+        return s.steeringText
     }
 
     private func setShot(_ size: ShotSize) {

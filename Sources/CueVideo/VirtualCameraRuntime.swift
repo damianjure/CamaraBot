@@ -21,7 +21,12 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private let zoomOverride: Double?
     private let outputHeight: Int
 
-    private let feed: CaptureFeed
+    private let feed: VideoInput
+    // Open and close the input: a capture device or an NDI source.
+    private let acquire: () -> Void
+    private let relinquish: () -> Void
+    /// Why it isn't taking its input at all (it would be fed its own output), or nil.
+    private let blocked: String?
     private let output: VirtualOutput
     private let motion: CropMotion
     private let vision = DispatchQueue(label: "cuevideo.virtual.vision", qos: .userInitiated)
@@ -50,7 +55,18 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         outputHeight = camera.output.height
         shot = camera.shot
         framing = Framing(camera.shot.standard.merged(config.framing[camera.shot.rawValue]))
-        feed = CaptureFeedHub.shared.feed(camera.device, name: camera.deviceName, preferred: camera.inputFormat)
+        if let source = camera.inputSource {
+            let f = NDIInputHub.shared.feed(source)
+            feed = f
+            acquire = { NDIInputHub.shared.retain(f) }
+            relinquish = { NDIInputHub.shared.release(f) }
+        } else {
+            let f = CaptureFeedHub.shared.feed(camera.device, name: camera.deviceName, preferred: camera.inputFormat)
+            feed = f
+            acquire = { CaptureFeedHub.shared.retain(f) }
+            relinquish = { CaptureFeedHub.shared.release(f) }
+        }
+        blocked = camera.inputIsOwnOutput ? "This camera is set to take its own NDI output as its input. Pick the source your switcher or vMix sends." : nil
         output = VirtualOutput(name: camera.ndiName, size: camera.output)
         let planner = CropPlanner(maxZoom: camera.maxZoom ?? 1)
         motion = CropMotion(planner: planner)
@@ -60,7 +76,9 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func start() {
         guard !started else { return }
         started = true
-        CaptureFeedHub.shared.retain(feed)
+        // A camera fed by its own output would never settle: it stays closed and says why.
+        guard blocked == nil else { return }
+        acquire()
         subscription = feed.subscribe { [weak self] pixels in self?.handle(pixels) }
     }
 
@@ -69,7 +87,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         started = false
         if let subscription { feed.unsubscribe(subscription) }
         subscription = nil
-        CaptureFeedHub.shared.release(feed)
+        if blocked == nil { relinquish() }
         output.close()
     }
 
@@ -89,7 +107,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func update(_ cam: VirtualCamera, config: CueConfig) {
         let sizeChanged = cam.shotSize != camera.shotSize
         // A name learned while running (see CaptureFeedHub.feed).
-        if cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
+        if cam.inputSource == nil, cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
         camera = cam
         frame(as: sizeChanged ? cam.shot : nil, config: config)
     }
@@ -158,7 +176,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         let shot = self.shot.rawValue
         let recent = dropWindow.add(now: Date(), sent: o.sent, dropped: o.dropped)
         lock.unlock()
-        return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: feed.live, problem: feed.problem,
+        return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: blocked == nil && feed.live, problem: blocked ?? feed.problem,
                       outputLive: o.live, sent: o.sent, dropped: o.dropped, recentSent: recent.sent, recentDropped: recent.dropped,
                       runtimeMissing: o.runtimeMissing,
                       mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal)
@@ -203,7 +221,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     }
 
     /// The first frame (or a new input format) tells the real picture size: set the zoom limit
-    /// from it and start again from the widest shot.
+    /// from it and start again from the widest shot. Only the capture path calls it in the app;
+    /// it is internal, not private, so tests can feed it frame sizes.
     func ensureGeometry(_ w: Int, _ h: Int) {
         lock.lock(); defer { lock.unlock() }
         guard geometry?.w != w || geometry?.h != h else { return }
