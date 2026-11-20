@@ -396,3 +396,34 @@ final class VirtualHealthTests: XCTestCase {
         XCTAssertEqual(VirtualHealth.problems(status(sent: 1000, dropped: 40), age: 30), [])
     }
 }
+
+final class CaptureDeviceMatchTests: XCTestCase {
+    private let list = [(id: "0xA", name: "ZV-E10M2"), (id: "0xB", name: "Cam Link 4K")]
+
+    func testTheSavedIDWins() {
+        XCTAssertEqual(CaptureFeed.resolve(id: "0xA", name: "Cam Link 4K", among: list), "0xA")
+    }
+
+    func testAChangedIDFallsBackToTheOneDeviceWithThatName() {
+        XCTAssertEqual(CaptureFeed.resolve(id: "0xZ", name: "ZV-E10M2", among: list), "0xA")
+    }
+
+    func testNothingIsGuessedWithoutAName() {
+        XCTAssertNil(CaptureFeed.resolve(id: "0xZ", name: nil, among: list))
+        XCTAssertNil(CaptureFeed.resolve(id: "0xZ", name: "", among: list))
+        XCTAssertNil(CaptureFeed.resolve(id: "0xZ", name: "Unknown", among: list))
+    }
+
+    func testTwoDevicesWithTheSameNameAreNotGuessed() {
+        let twins = [(id: "0xA", name: "Cam Link 4K"), (id: "0xB", name: "Cam Link 4K")]
+        XCTAssertNil(CaptureFeed.resolve(id: "0xZ", name: "Cam Link 4K", among: twins))
+    }
+
+    func testTheDeviceNameIsKeptInTheSetup() throws {
+        var cam = VirtualCamera(device: "0xA", ndiName: "n")
+        cam.deviceName = "ZV-E10M2"
+        let back = try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam))
+        XCTAssertEqual(back.deviceName, "ZV-E10M2")
+        XCTAssertNil(try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"0xA","ndiName":"n"}"#.utf8)).deviceName)
+    }
+}

@@ -22,6 +22,8 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     @Published private(set) var shape = ""
 
     let deviceID: String
+    /// The device's name, to find it again when its ID changes (plugged into another USB port).
+    let deviceName: String?
     /// Which format to ask for, as "3840x2160". Nil takes the largest the device offers.
     let preferred: String?
 
@@ -39,8 +41,9 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     private var duration = CMTime(value: 1001, timescale: 30000)
     private var watchdog: DispatchSourceTimer?
 
-    init(deviceID: String, preferred: String? = nil) {
+    init(deviceID: String, deviceName: String? = nil, preferred: String? = nil) {
         self.deviceID = deviceID
+        self.deviceName = deviceName
         self.preferred = preferred
     }
 
@@ -98,9 +101,21 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .video, position: .unspecified)
     }
 
+    /// The ID to open: the saved one when that device is there, else the one device with the saved
+    /// name. A USB capture device's ID follows the port it is plugged into, so a different port
+    /// gives a new ID; two devices with the same name can't be told apart, so none is guessed.
+    static func resolve(id: String, name: String?, among list: [(id: String, name: String)]) -> String? {
+        if list.contains(where: { $0.id == id }) { return id }
+        guard let name, !name.isEmpty else { return nil }
+        let same = list.filter { $0.name == name }
+        return same.count == 1 ? same[0].id : nil
+    }
+
     /// Only an external device, even when given the ID of the built-in camera.
-    private static func device(_ id: String) -> AVCaptureDevice? {
-        discovery().devices.first { $0.uniqueID == id }
+    private static func device(_ id: String, name: String?) -> AVCaptureDevice? {
+        let all = discovery().devices
+        guard let found = resolve(id: id, name: name, among: all.map { ($0.uniqueID, $0.localizedName) }) else { return nil }
+        return all.first { $0.uniqueID == found }
     }
 
     private static func dims(_ f: AVCaptureDevice.Format) -> (w: Int, h: Int) {
@@ -157,7 +172,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
             return
         default: break
         }
-        guard let device = Self.device(deviceID) else { fail("The capture device isn't connected, or isn't an external one."); return }
+        guard let device = Self.device(deviceID, name: deviceName) else { fail("The capture device isn't connected, or isn't an external one."); return }
         guard let format = Self.pick(device.formats, preferred: preferred) else { fail("The capture device offers no video format."); return }
 
         if session.isRunning { session.stopRunning() }
@@ -212,7 +227,7 @@ final class CaptureFeed: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         let quiet = now.timeIntervalSince(lastFrame)
         if quiet > 2, live { DispatchQueue.main.async { self.live = false } }
         guard quiet > 3 else { return }
-        let present = Self.device(deviceID) != nil
+        let present = Self.device(deviceID, name: deviceName) != nil
         if present { fail("The capture device is connected but sends no picture. Check that the camera is on and plugged into it.") }
         if now.timeIntervalSince(lastConfigure) > (present ? 10 : 3) { configureAndRun() }
     }
@@ -251,15 +266,15 @@ final class CaptureFeedHub {
     private var users: [String: Int] = [:]
 
     /// The feed for a device. `preferred` is used only when the feed is first made.
-    func feed(_ id: String, preferred: String? = nil) -> CaptureFeed {
+    func feed(_ id: String, name: String? = nil, preferred: String? = nil) -> CaptureFeed {
         if let f = feeds[id] { return f }
-        let f = CaptureFeed(deviceID: id, preferred: preferred)
+        let f = CaptureFeed(deviceID: id, deviceName: name, preferred: preferred)
         feeds[id] = f
         return f
     }
 
-    func retain(_ id: String, preferred: String? = nil) -> CaptureFeed {
-        let f = feed(id, preferred: preferred)
+    func retain(_ id: String, name: String? = nil, preferred: String? = nil) -> CaptureFeed {
+        let f = feed(id, name: name, preferred: preferred)
         users[id, default: 0] += 1
         if users[id] == 1 { f.start() }
         return f

@@ -36,7 +36,11 @@ struct VirtualCamerasSetup: View {
     private func add() {
         guard let d = devices.first else { return }
         let n = store.config.virtualCameras.count + 1
-        store.update { $0.virtualCameras.append(VirtualCamera(name: "Virtual camera \(n)", device: d.id, ndiName: "Virtual camera \(n)")) }
+        store.update {
+            var cam = VirtualCamera(name: "Virtual camera \(n)", device: d.id, ndiName: "Virtual camera \(n)")
+            cam.deviceName = d.name
+            $0.virtualCameras.append(cam)
+        }
     }
 }
 
@@ -58,7 +62,11 @@ struct VirtualCameraCard: View {
         }
     }
 
-    private var device: CaptureDeviceInfo? { devices.first { $0.id == cam.device } }
+    /// The device it uses: by its saved ID, or by name when the ID changed (another USB port).
+    private var device: CaptureDeviceInfo? {
+        let id = CaptureFeed.resolve(id: cam.device, name: cam.deviceName, among: devices.map { ($0.id, $0.name) })
+        return devices.first { $0.id == id }
+    }
 
     /// "3840x2160", largest first, from what macOS says the device offers.
     private var sizes: [String] {
@@ -95,7 +103,7 @@ struct VirtualCameraCard: View {
 
             labeled("Capture device") {
                 MenuField(text: device?.name ?? "Not found", width: 260) {
-                    ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.inputFormat = nil } } }
+                    ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.deviceName = d.name; $0.inputFormat = nil } } }
                 }
                 if device == nil { note("Plug it in, then Refresh devices.") }
             }
@@ -152,7 +160,11 @@ struct VirtualCameraCard: View {
             Rectangle().fill(T.line).frame(height: 1)
             if cam.enabled { LiveStatus(id: cam.id, ndiName: cam.ndiName) } else { note("Switched off.") }
         }
-        .onAppear { nameDraft = cam.name; ndiDraft = cam.ndiName; zoomDraft = cam.maxZoom ?? 2.5 }
+        .onAppear {
+            nameDraft = cam.name; ndiDraft = cam.ndiName; zoomDraft = cam.maxZoom ?? 2.5
+            // A camera saved before names were kept learns its device's name while the device is here.
+            if cam.deviceName == nil, let d = device { edit { $0.deviceName = d.name } }
+        }
         .onChange(of: cam.name) { _, v in if focus != .name { nameDraft = v } }
         .onChange(of: cam.ndiName) { _, v in if focus != .ndi { ndiDraft = v } }
         .onChange(of: focus) { old, _ in

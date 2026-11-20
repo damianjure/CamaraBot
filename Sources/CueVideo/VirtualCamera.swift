@@ -32,6 +32,8 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     var enabled = true
     /// The capture device's unique ID (see the capture devices list in Engineer).
     var device: String
+    /// The device's name when it was chosen: if its ID changes (another USB port) the one device with this name is used.
+    var deviceName: String?
     /// Which format to ask the device for, as "3840x2160". Nil takes the largest it offers.
     var inputFormat: String?
     var output: OutputSize = .p1080
@@ -53,7 +55,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -61,6 +63,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Virtual camera"
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         device = try c.decode(String.self, forKey: .device)
+        deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName)
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080
         ndiName = try c.decodeIfPresent(String.self, forKey: .ndiName) ?? name

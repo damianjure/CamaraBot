@@ -49,7 +49,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         outputHeight = camera.output.height
         shot = camera.shot
         framing = Framing(camera.shot.standard.merged(config.framing[camera.shot.rawValue]))
-        feed = CaptureFeedHub.shared.feed(camera.device, preferred: camera.inputFormat)
+        feed = CaptureFeedHub.shared.feed(camera.device, name: camera.deviceName, preferred: camera.inputFormat)
         output = VirtualOutput(name: camera.ndiName, size: camera.output)
         let planner = CropPlanner(maxZoom: camera.maxZoom ?? 1)
         motion = CropMotion(planner: planner)
@@ -59,7 +59,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func start() {
         guard !started else { return }
         started = true
-        _ = CaptureFeedHub.shared.retain(camera.device, preferred: camera.inputFormat)
+        _ = CaptureFeedHub.shared.retain(camera.device, name: camera.deviceName, preferred: camera.inputFormat)
         subscription = feed.subscribe { [weak self] pixels in self?.handle(pixels) }
     }
 
