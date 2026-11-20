@@ -261,6 +261,8 @@ struct ConnectView: View {
             default: EmptyView()
             }
             Spacer()
+            // The virtual cameras don't need a switcher: they are steered here with or without one.
+            VirtualOperatorStrip().padding(T.s4)
         }
         .font(.sans(14))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
