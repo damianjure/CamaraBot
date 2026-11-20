@@ -24,6 +24,8 @@ bool ndi_recv_frame(void *recv, int timeout_ms, const uint8_t **data, int *width
 /// The shape the picture should be shown at (width ÷ height) for a frame from ndi_recv_frame,
 /// which differs from its pixel size when the pixels aren't square. 0 if the sender didn't say.
 float ndi_frame_aspect(void *frame);
+/// The frame rate the sender says (numerator and denominator), or 0 and 0 when it didn't.
+void ndi_frame_rate(void *frame, int *n, int *d);
 void ndi_recv_release(void *recv, void *frame);
 void ndi_recv_close(void *recv);
 

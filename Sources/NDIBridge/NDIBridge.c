@@ -134,6 +134,11 @@ float ndi_frame_aspect(void *frame) {
     return frame ? ((video_frame_v2_t *)frame)->picture_aspect_ratio : 0;
 }
 
+void ndi_frame_rate(void *frame, int *n, int *d) {
+    *n = frame ? ((video_frame_v2_t *)frame)->frame_rate_N : 0;
+    *d = frame ? ((video_frame_v2_t *)frame)->frame_rate_D : 0;
+}
+
 void ndi_recv_release(void *recv, void *frame) {
     if (!recv || !frame) return;
     f_recv_free_video_v2(recv, frame);

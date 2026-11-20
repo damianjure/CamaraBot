@@ -1,4 +1,5 @@
 import XCTest
+import NDIBridge
 import CoreGraphics
 @testable import CueVideo
 
@@ -564,4 +565,47 @@ final class NDIInputTests: XCTestCase {
         let src = [UInt8](repeating: 0, count: 16)
         XCTAssertFalse(src.withUnsafeBufferPointer { NDIInputFeed.fill(try! XCTUnwrap(buffer), from: $0.baseAddress!, 4, 1, 8) })
     }
+}
+
+/// Sends a picture over the real NDI runtime and takes it in again, when the runtime is installed.
+final class NDIInputLoopbackTests: XCTestCase {
+    func testAPictureSentOverNDIArrivesAsAFullSizePixelBuffer() throws {
+        guard ndi_load() != nil else { throw XCTSkip("The NDI runtime isn't installed.") }
+        let channel = "CueVideoLoopback\(Int.random(in: 1000...9999))"
+        guard let send = ndi_send_open(channel) else { throw XCTSkip("NDI sender couldn't open.") }
+        let w = 640, h = 360
+        var frame = [UInt8](repeating: 0, count: w * h * 4)
+        for i in stride(from: 0, to: frame.count, by: 4) { frame[i] = 200; frame[i + 1] = 100; frame[i + 2] = 50; frame[i + 3] = 255 }
+        let sending = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "loopback.send"))
+        sending.schedule(deadline: .now(), repeating: .milliseconds(33))
+        sending.setEventHandler { frame.withUnsafeBufferPointer { ndi_send_frame(send, $0.baseAddress, Int32(w), Int32(h), Int32(w * 4), 30, 1) } }
+        sending.resume()
+        defer { sending.cancel(); ndi_send_close(send) }
+
+        let feed = NDIInputFeed(source: "ANY COMPUTER (\(channel))")
+        let got = XCTestExpectation(description: "a frame arrives")
+        let box = Box()
+        let id = feed.subscribe { pixels in
+            box.lock.lock(); defer { box.lock.unlock() }
+            guard box.size == nil else { return }
+            box.size = (CVPixelBufferGetWidth(pixels), CVPixelBufferGetHeight(pixels))
+            CVPixelBufferLockBaseAddress(pixels, .readOnly)
+            if let base = CVPixelBufferGetBaseAddress(pixels)?.assumingMemoryBound(to: UInt8.self) { box.first = [base[0], base[1], base[2]] }
+            CVPixelBufferUnlockBaseAddress(pixels, .readOnly)
+            got.fulfill()
+        }
+        feed.start()
+        defer { feed.unsubscribe(id); feed.stop() }
+        wait(for: [got], timeout: 15)
+        box.lock.lock(); defer { box.lock.unlock() }
+        XCTAssertEqual(box.size?.0, w)
+        XCTAssertEqual(box.size?.1, h)
+        // NDI compresses, so the colour is close to what was sent, not identical.
+        for (got, sent) in zip(box.first, [200, 100, 50]) { XCTAssertEqual(Int(got), sent, accuracy: 15) }
+        XCTAssertEqual(box.first.count, 3)
+        XCTAssertTrue(feed.live)
+        XCTAssertEqual(feed.shape, "640x360 @ 30.00")
+    }
+
+    private final class Box { let lock = NSLock(); var size: (Int, Int)?; var first: [UInt8] = [] }
 }
