@@ -29,7 +29,7 @@ struct SurfaceView: View {
                 }
             }
             if st.auxCount > 0 {
-                Card(title: "Aux outputs", help: "The same outputs as the Routing page, by number. Routing shows them by the screen each one feeds.") { aux }
+                Card(title: "Aux outputs", help: tr("The same outputs as the Routing page, by number. Routing shows them by the screen each one feeds.", es: "Las mismas salidas de la página Routing, por número. Routing las muestra según la pantalla que alimenta cada una.")) { aux }
             }
         }
     }
@@ -140,18 +140,18 @@ struct SurfaceView: View {
                     }
                 }
                 HStack(spacing: 2) {
-                    IconButton(icon: "minus", help: "Shorter mix") { atem.setMixRate((st.mixRate[me] ?? 30) - 5, me: me) }
+                    IconButton(icon: "minus", help: tr("Shorter mix", es: "Mix más corto")) { atem.setMixRate((st.mixRate[me] ?? 30) - 5, me: me) }
                     Text(rate(st.mixRate[me] ?? 30)).font(.sans(12, .semibold)).frame(width: 34)
-                    IconButton(icon: "plus", help: "Longer mix") { atem.setMixRate((st.mixRate[me] ?? 30) + 5, me: me) }
+                    IconButton(icon: "plus", help: tr("Longer mix", es: "Mix más largo")) { atem.setMixRate((st.mixRate[me] ?? 30) + 5, me: me) }
                 }
-                .help("Mix length in seconds and frames")
+                .help(tr("Mix length in seconds and frames", es: "Duración del mix en segundos y cuadros"))
             }
             VStack(spacing: T.s2) {
                 PanelButton(title: "CUT", width: 84, height: 52, titleSize: 15) { atem.cut(me: me) }
                 PanelButton(title: "AUTO", lit: inT ? T.program : nil, width: 84, height: 52, titleSize: 15) { atem.auto(me: me) }
                 PanelButton(title: "FTB", lit: black || (st.ftbInTransition[me] ?? false) ? T.program : nil,
                             width: 84, height: 36, titleSize: 12, blink: black) { atem.fadeToBlack(me: me) }
-                    .help("Fade to black")
+                    .help(tr("Fade to black", es: "Fundido a negro"))
             }
             TBar(me: me).frame(width: 56, height: 170)
         }

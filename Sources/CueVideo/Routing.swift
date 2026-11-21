@@ -22,7 +22,7 @@ struct RoutePanel: View {
                 Text("Screens").panelLabel()
                 Spacer()
                 Button { Booth.shared.show(.routing) } label: { Image(systemName: "arrow.triangle.branch").font(.system(size: 11)) }
-                    .buttonStyle(.borderless).foregroundStyle(T.inkSubtle).help("Open the Routing page")
+                    .buttonStyle(.borderless).foregroundStyle(T.inkSubtle).help(tr("Open the Routing page", es: "Abrir la página Routing"))
             }
             if !routes.isEmpty {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: T.s2), GridItem(.flexible(), spacing: T.s2)], spacing: T.s2) {
@@ -129,7 +129,7 @@ struct RoutingWindow: View {
         VStack(alignment: .leading, spacing: T.s3) {
             HStack(spacing: T.s2) {
                 Text("Operator routing buttons").panelLabel()
-                HelpButton(text: "Buttons in the bottom right of Operate. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button.")
+                HelpButton(text: tr("Buttons in the bottom right of Operate. Each one sends one or more screens a picture, like a macro, and lights up while the screens match it. The easy way to make one: route the screens the way you want above, then save that as a button.", es: "Botones abajo a la derecha de Operate. Cada uno manda una imagen a una o más pantallas, como un macro, y se enciende mientras las pantallas coinciden. La forma fácil de crear uno: enrutá las pantallas como quieras arriba y guardalo como botón."))
                 Spacer()
                 Button("Save the current routing as a button…") { newButton = true }
                     .buttonStyle(CueButton())
@@ -159,9 +159,9 @@ struct RoutingWindow: View {
             HStack(spacing: 2) {
                 Button("Run now") { r.run(atem) }.buttonStyle(CueButton())
                 Spacer()
-                IconButton(icon: "chevron.left", help: "Move earlier") { moveRoute(i, -1) }.disabled(i == 0)
-                IconButton(icon: "chevron.right", help: "Move later") { moveRoute(i, 1) }.disabled(i == store.config.routes.count - 1)
-                IconButton(icon: "trash", help: "Remove this button") { store.update { $0.routes.removeAll { $0 == r } } }
+                IconButton(icon: "chevron.left", help: tr("Move earlier", es: "Mover antes")) { moveRoute(i, -1) }.disabled(i == 0)
+                IconButton(icon: "chevron.right", help: tr("Move later", es: "Mover después")) { moveRoute(i, 1) }.disabled(i == store.config.routes.count - 1)
+                IconButton(icon: "trash", help: tr("Remove this button", es: "Quitar este botón")) { store.update { $0.routes.removeAll { $0 == r } } }
             }
         }
         .padding(T.s3)
@@ -193,7 +193,7 @@ struct ScreenEditButton: View {
     var auxLabel: String { screen.aux.count == 1 ? "Aux \(screen.aux[0])" : "Aux " + screen.aux.map(String.init).joined(separator: ", ") }
 
     var body: some View {
-        IconButton(icon: "pencil", help: named ? "Change the name, outputs or wiring note" : "Name this output", size: 15) { load(); editing = true }
+        IconButton(icon: "pencil", help: named ? tr("Change the name, outputs or wiring note", es: "Cambiar el nombre, las salidas o la nota de cableado") : tr("Name this output", es: "Ponerle nombre a esta salida"), size: 15) { load(); editing = true }
             .popover(isPresented: $editing, arrowEdge: .trailing) { editor }
     }
 
@@ -203,22 +203,22 @@ struct ScreenEditButton: View {
             field("Name") { TextField("Such as Lobby TVs", text: $name).textFieldStyle(CueFieldStyle()).onSubmit(save) }
             field("Aux outputs") {
                 TextField("4, 5", text: $auxText).textFieldStyle(CueFieldStyle()).onSubmit(save)
-                Text("Counted from 1. Several, such as 4, 5, switch together.").font(.sans(11)).foregroundStyle(T.inkSubtle)
+                Text(tr("Counted from 1. Several, such as 4, 5, switch together.", es: "Se cuentan desde 1. Varias, como 4, 5, cambian juntas.")).font(.sans(11)).foregroundStyle(T.inkSubtle)
             }
             field("Wiring note") { TextField("Such as Converter 1 → Lobby TV", text: $note).textFieldStyle(CueFieldStyle()).onSubmit(save) }
             if named {
                 Toggle("Preview in the top bar", isOn: Binding(get: { store.pinnedScreens.contains { $0.id == screen.id } },
                                                                set: { store.setPinned(screen.id, $0) }))
                     .toggleStyle(.switch).controlSize(.small).font(.sans(12))
-                    .help("A small live picture of what this is showing, in the bar across the top. Up to four.")
+                    .help(tr("A small live picture of what this is showing, in the bar across the top. Up to four.", es: "Una imagen en vivo chica de lo que muestra esto, en la barra de arriba. Hasta cuatro."))
                 Toggle("Show to operators", isOn: Binding(get: { screen.forVolunteers }, set: { v in update { $0.volunteer = v } }))
                     .toggleStyle(.switch).controlSize(.small).font(.sans(12))
-                    .help("Off for encoders, recorders and patch bay feeds: they move to Encoders and feeds, and Claude needs to be told to change them.")
+                    .help(tr("Off for encoders, recorders and patch bay feeds: they move to Encoders and feeds, and Claude needs to be told to change them.", es: "Apagado para encoders, grabadores y salidas al patch bay: pasan a Encoders and feeds, y hay que pedirle a Claude que los cambie."))
             }
             HStack(spacing: T.s2) {
                 if named {
                     Button("Forget this name") { store.update { $0.screens.removeAll { $0 == screen } }; editing = false }
-                        .buttonStyle(CueButton(kind: .danger)).help("The output stays; it goes back to Outputs not named yet.")
+                        .buttonStyle(CueButton(kind: .danger)).help(tr("The output stays; it goes back to Outputs not named yet.", es: "La salida queda; vuelve a Outputs not named yet."))
                 }
                 Spacer()
                 Button("Cancel") { editing = false }.buttonStyle(CueButton())

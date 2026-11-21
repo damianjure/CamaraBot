@@ -1037,3 +1037,25 @@ final class LanguageTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(CueConfig.self, from: Data("{}".utf8)).language)
     }
 }
+
+/// Every help text goes through `tr`, so none is left in English for a Spanish reader. Technical
+/// terms and control labels are meant to stay English and aren't checked.
+final class HelpTextsAreTranslatedTests: XCTestCase {
+    func testNoHelpTextIsLeftBare() throws {
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/CueVideo")
+        let help = try NSRegularExpression(pattern: #"(\.help\(|[( ]help: |purpose: |HelpButton\(text: |[^a-zA-Z]note\()""#)
+        let sentence = try NSRegularExpression(pattern: #"Text\("[^"\\]{55,}"#)
+        var bare: [String] = []
+        for file in try FileManager.default.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil) where file.pathExtension == "swift" {
+            let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
+            for (i, line) in lines.enumerated() where !line.contains("tr(\"") && !line.contains(".help(\"Churchfront Video\")") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
+                let range = NSRange(line.startIndex..., in: line)
+                if help.firstMatch(in: line, range: range) != nil || sentence.firstMatch(in: line, range: range) != nil {
+                    bare.append("\(file.lastPathComponent):\(i + 1): \(line.trimmingCharacters(in: .whitespaces).prefix(90))")
+                }
+            }
+        }
+        XCTAssertEqual(bare, [], "Help texts without a Spanish version (wrap them in tr(\"…\", es: \"…\")).")
+    }
+}

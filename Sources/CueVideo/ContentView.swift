@@ -61,7 +61,7 @@ struct TopBar: View {
                 + (waiting.isEmpty ? [] : ["\(waiting.map(\.name).joined(separator: ", ")) waiting for control"])
             if !problem.isEmpty {
                 Text(problem.joined(separator: " · ")).font(.sans(12, .semibold)).foregroundStyle(T.warning).lineLimit(1)
-                    .help("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks Churchfront Video.")
+                    .help(tr("Canon cameras take commands from one controller at a time. A logged-in session, like the camera's own web page, outranks Churchfront Video.", es: "Las cámaras Canon aceptan comandos de un solo controlador a la vez. Una sesión abierta, como la página web de la propia cámara, tiene prioridad sobre Churchfront Video."))
             }
             if atem.state.ftbBlack[booth.me] ?? false {
                 Text("Faded to black").font(.sans(12, .bold)).foregroundStyle(T.warning).lineLimit(1)
@@ -91,9 +91,9 @@ struct PageTabs: View {
     var body: some View {
         // Tabs in the CueScreens manner: caps labels, the one you're on in accent with a line under it.
         HStack(spacing: T.s4) {
-            tab("Operate", "slider.horizontal.3", "The booth screen: pick, frame, take (⌘1)", on: booth.view == .operate) { booth.view = .operate }
+            tab("Operate", "slider.horizontal.3", tr("The booth screen: pick, frame, take (⌘1)", es: "La pantalla de la cabina: elegir, encuadrar, tomar (⌘1)"), on: booth.view == .operate) { booth.view = .operate }
             ForEach(EngineerSection.allCases) { s in
-                tab(s.title, s.icon, s.note + ". Space, Return and the number keys do nothing here, so they can't cut or fade.",
+                tab(s.title, s.icon, s.note + tr(". Space, Return and the number keys do nothing here, so they can't cut or fade.", es: ". Space, Return y las teclas numéricas no hacen nada acá, así que no pueden cortar ni fundir."),
                     on: booth.view == .engineer && booth.section == s) { booth.show(s) }
             }
         }
@@ -129,16 +129,16 @@ struct TopMonitors: View {
         HStack(alignment: .top, spacing: T.s2) {
             if booth.view != .operate {
                 monitor(s.program[booth.me], caption: store.label(s.program[booth.me], s), tag: ("Live", T.program, .white),
-                        help: "Live now. Click to go to Operate.") { booth.view = .operate }
+                        help: tr("Live now. Click to go to Operate.", es: "En vivo ahora. Clic para ir a Operate.")) { booth.view = .operate }
                 monitor(s.preview[booth.me], caption: store.label(s.preview[booth.me], s), tag: ("Next", T.preview, T.onAction),
-                        help: "On Next. Click to go to Operate.") { booth.view = .operate }
+                        help: tr("On Next. Click to go to Operate.", es: "En Next. Clic para ir a Operate.")) { booth.view = .operate }
                 if !store.pinnedScreens.isEmpty { Rectangle().fill(T.line).frame(width: 1, height: 52) }
             }
             ForEach(store.pinnedScreens) { sc in
                 let now = Set(sc.aux.map { s.aux[$0 - 1] })
                 let src: Int? = now.count == 1 ? (now.first ?? nil) : nil
                 monitor(src, caption: sc.name, tag: nil,
-                        help: "\(sc.name) is showing \(now.count > 1 ? "different pictures on its outputs" : store.routeLabel(src, s)). Click to open Routing.") { booth.show(.routing) }
+                        help: tr("\(sc.name) is showing \(now.count > 1 ? "different pictures on its outputs" : store.routeLabel(src, s)). Click to open Routing.", es: "\(sc.name) muestra \(now.count > 1 ? "imágenes distintas en sus salidas" : store.routeLabel(src, s)). Clic para abrir Routing.")) { booth.show(.routing) }
             }
         }
     }
@@ -219,7 +219,7 @@ struct ConfigBanner: View {
     @EnvironmentObject var store: ConfigStore
     var body: some View {
         if store.fileError != nil {
-            Text("The setup file has a mistake in it, so Churchfront Video is using the last good setup. Details are in Setup (⌘,).")
+            Text(tr("The setup file has a mistake in it, so Churchfront Video is using the last good setup. Details are in Setup (⌘,).", es: "El archivo de configuración tiene un error, así que Churchfront Video usa la última configuración buena. El detalle está en Setup (⌘,)."))
                 .font(.sans(13, .semibold)).foregroundStyle(T.onAction)
                 .padding(.horizontal, T.s4).padding(.vertical, T.s2)
                 .background(Capsule().fill(T.warning)).padding(.top, T.s3)
@@ -247,7 +247,7 @@ struct ConnectView: View {
             VirtualCameraBanner().frame(maxWidth: .infinity)
             switcherBar
             if let e = store.fileError {
-                Text("The setup file couldn't be read, so nothing from it is loaded: \(e)\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it.")
+                Text(tr("The setup file couldn't be read, so nothing from it is loaded: \(e)\nFix it in Setup (⌘,), or connect here to start again. The file is kept under another name before anything is saved over it.", es: "No se pudo leer el archivo de configuración, así que no se cargó nada de él: \(e)\nArreglalo en Setup (⌘,), o conectá acá para empezar de nuevo. El archivo se guarda con otro nombre antes de escribir algo encima."))
                     .foregroundStyle(T.warning)
             }
             if store.config.virtualCameras.contains(where: \.enabled) {
@@ -255,7 +255,7 @@ struct ConnectView: View {
             } else {
                 VStack(spacing: T.s2) {
                     Text("No virtual cameras yet").font(.sans(16, .semibold))
-                    Text("Add one in Setup > Virtual cameras to follow a person with a fixed camera and send it out over NDI.")
+                    Text(tr("Add one in Setup > Virtual cameras to follow a person with a fixed camera and send it out over NDI.", es: "Agregá una en Setup > Virtual cameras para seguir a una persona con una cámara fija y enviarla por NDI."))
                         .font(.sans(13)).foregroundStyle(T.inkMuted).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -282,7 +282,7 @@ struct ConnectView: View {
             }
             .buttonStyle(.plain)
             if open {
-                Text("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed. Find the switcher's IP address in ATEM Setup under Network.")
+                Text(tr("Churchfront Video talks to the switcher directly over your network. No Blackmagic software needed. Find the switcher's IP address in ATEM Setup under Network.", es: "Churchfront Video habla con el switcher directamente por tu red. No hace falta software de Blackmagic. La dirección IP del switcher está en ATEM Setup, en Network."))
                     .font(.sans(12)).foregroundStyle(T.inkMuted)
                 HStack {
                     TextField("Such as 192.168.1.240", text: $host)

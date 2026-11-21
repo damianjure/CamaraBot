@@ -58,7 +58,7 @@ struct HelpButton: View {
             Image(systemName: "questionmark.circle").font(.system(size: 13)).foregroundStyle(T.inkSubtle)
         }
         .buttonStyle(.plain)
-        .help("What this is for")
+        .help(tr("What this is for", es: "Para qué sirve esto"))
         .popover(isPresented: $open, arrowEdge: .bottom) {
             Text(text).font(.sans(13)).foregroundStyle(T.ink).fixedSize(horizontal: false, vertical: true)
                 .frame(width: 380, alignment: .leading).padding(T.s4)

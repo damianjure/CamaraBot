@@ -265,10 +265,10 @@ struct RoutingSchematic: View {
                      ?? (message.isEmpty ? "Drag a source or a mix onto a destination, or click one and then the other. It changes right away." : message))
                     .font(.sans(12, message.isEmpty || selected != nil ? .regular : .semibold))
                     .foregroundStyle(selected != nil ? T.accent : (message.isEmpty ? T.inkSubtle : T.success))
-                HelpButton(text: "Each switcher output feeds a screen or a piece of gear. Drag a source or a mix onto a destination to change what it shows, right away. The pencil on a destination names it, sets which outputs feed it (a pair listed together switches together) and notes how it's wired. Outputs that feed encoders and recorders are locked so nobody changes the stream by accident, and ports that only go to the patch bay fold away as spare.")
+                HelpButton(text: tr("Each switcher output feeds a screen or a piece of gear. Drag a source or a mix onto a destination to change what it shows, right away. The pencil on a destination names it, sets which outputs feed it (a pair listed together switches together) and notes how it's wired. Outputs that feed encoders and recorders are locked so nobody changes the stream by accident, and ports that only go to the patch bay fold away as spare.", es: "Cada salida del switcher alimenta una pantalla o un equipo. Arrastrá una fuente o un mix sobre un destino para cambiar lo que muestra, al instante. El lápiz de un destino le pone nombre, define qué salidas lo alimentan (un par listado junto cambia junto) y anota cómo está cableado. Las salidas que alimentan encoders y grabadores están bloqueadas para que nadie cambie la transmisión por accidente, y los puertos que solo van al patch bay se pliegan como libres."))
                 Spacer()
                 Button("Undo") { if let u = undo.popLast() { u.back(); message = "\(u.what) is back to what it was." } }
-                    .buttonStyle(CueButton()).disabled(undo.isEmpty).help("Put back the last thing changed here")
+                    .buttonStyle(CueButton()).disabled(undo.isEmpty).help(tr("Put back the last thing changed here", es: "Deshacer el último cambio hecho acá"))
             }
         }
         // No card around it: the schematic is the page.
@@ -289,7 +289,7 @@ struct RoutingSchematic: View {
                         .font(.sans(11, .semibold)).foregroundStyle(feedsUnlocked ? T.inkMuted : T.warning).fixedSize()
                 }
                 .buttonStyle(.plain)
-                .help(feedsUnlocked ? "Lock these again" : "One of these may carry the live stream. Unlock to change them.")
+                .help(feedsUnlocked ? tr("Lock these again", es: "Volver a bloquearlas") : tr("One of these may carry the live stream. Unlock to change them.", es: "Alguna puede llevar la transmisión en vivo. Desbloqueá para cambiarlas."))
             }
         }
         .frame(width: sizes(w).side, height: headH - 4, alignment: .leading)
@@ -302,7 +302,7 @@ struct RoutingSchematic: View {
             default: break
             }
         }
-        .help(h.group == .spareIn || h.group == .spareOut ? "Ports that only go to patch bay tie lines" : "")
+        .help(h.group == .spareIn || h.group == .spareOut ? tr("Ports that only go to patch bay tie lines", es: "Puertos que solo van a líneas del patch bay") : "")
         .position(x: (right ? w - sizes(w).side / 2 : sizes(w).side / 2), y: h.y + (headH - 4) / 2)
     }
 
@@ -350,8 +350,8 @@ struct RoutingSchematic: View {
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(on ? T.accent : (c ?? T.line), lineWidth: on ? 3 : (c == nil ? 1 : 2)))
         .draggable(s.id, self, L, w)
-        .help(((1...999).contains(s.id) ? "Switcher input \(s.id): \(atem.state.inputs[s.id]?.long ?? "")\n" : "")
-              + "Drag onto a destination or a mix, or click this and then click where it should go")
+        .help(((1...999).contains(s.id) ? tr("Switcher input \(s.id): \(atem.state.inputs[s.id]?.long ?? "")\n", es: "Entrada del switcher \(s.id): \(atem.state.inputs[s.id]?.long ?? "")\n") : "")
+              + tr("Drag onto a destination or a mix, or click this and then click where it should go", es: "Arrastrá a un destino o un mix, o hacé clic acá y después donde debe ir"))
     }
 
     /// Whether a source is Live or Next on the mix in focus.
@@ -419,8 +419,15 @@ struct RoutingSchematic: View {
             if let sel = selected, !isMix(sel), !mine { putLive(sel, m.me) } else { selected = selected == m.output ? nil : m.output }
         }
         .draggable(m.output, self, L, w)
-        .help(mine ? "\(store.mixName(m.me)): what Operate cuts and fades. Drag it onto a destination to send it there."
-                   : "\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination")
+        .help(mine ? tr("\(store.mixName(m.me)): what Operate cuts and fades. Drag it onto a destination to send it there.", es: "\(store.mixName(m.me)): lo que Operate corta y funde. Arrastralo a un destino para enviarlo ahí.")
+                   : tr("\(store.mixName(m.me)): drop a source here to put it live, or drag this onto a destination", es: "\(store.mixName(m.me)): soltá una fuente acá para ponerla en vivo, o arrastrá esto a un destino"))
+    }
+
+    private func helpText(for d: Dst) -> String {
+        let aux = d.screen.aux.map(String.init).joined(separator: ", ")
+        let note = (d.screen.note ?? "").isEmpty ? "" : "\n\(d.screen.note!)"
+        return tr("\(d.screen.name), switcher output \(aux)" + note + (d.locked ? "\nLocked. Unlock Encoders and feeds to change it." : ""),
+                  es: "\(d.screen.name), salida del switcher \(aux)" + note + (d.locked ? "\nBloqueada. Desbloqueá Encoders and feeds para cambiarla." : ""))
     }
 
     private func destRow(_ d: Dst, _ c: Color?, target: Bool, _ w: CGFloat) -> some View {
@@ -456,8 +463,7 @@ struct RoutingSchematic: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 ? d.source : (hover == d.source ? nil : hover) }
         .onTapGesture { if let s = selected { route(s, d) } }
-        .help("\(d.screen.name), switcher output \(d.screen.aux.map(String.init).joined(separator: ", "))"
-              + ((d.screen.note ?? "").isEmpty ? "" : "\n\(d.screen.note!)") + (d.locked ? "\nLocked. Unlock Encoders and feeds to change it." : ""))
+        .help(helpText(for: d))
     }
 
     // MARK: Changing things
@@ -535,7 +541,7 @@ struct MixNameButton: View {
     @State private var editing = false
 
     var body: some View {
-        IconButton(icon: "pencil", help: "Name what this mix is for", size: 15) { editing = true }
+        IconButton(icon: "pencil", help: tr("Name what this mix is for", es: "Ponerle nombre a lo que hace este mix"), size: 15) { editing = true }
             .popover(isPresented: $editing, arrowEdge: .top) {
                 VStack(alignment: .leading, spacing: T.s2) {
                     Text("What M/E \(me + 1) is for").font(.sans(14, .bold))
@@ -561,7 +567,7 @@ struct SourcePictureButton: View {
     @State private var editing = false
 
     var body: some View {
-        IconButton(icon: "pencil", help: "Choose a live picture for this source", size: 15) { editing = true }
+        IconButton(icon: "pencil", help: tr("Choose a live picture for this source", es: "Elegir una imagen en vivo para esta fuente"), size: 15) { editing = true }
             .popover(isPresented: $editing, arrowEdge: .trailing) {
                 VStack(alignment: .leading, spacing: T.s2) {
                     Text("Picture for \(store.label(input, atem.state))").font(.sans(14, .bold))

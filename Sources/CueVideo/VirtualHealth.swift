@@ -89,7 +89,7 @@ struct VirtualStatusSection: View {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let cams = VirtualCameras.shared.all
                 if cams.isEmpty {
-                    Text("None running. Add or switch one on in Setup > Virtual cameras.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                    Text(tr("None running. Add or switch one on in Setup > Virtual cameras.", es: "No hay ninguna en marcha. Agregá o encendé una en Setup > Virtual cameras.")).font(.sans(12)).foregroundStyle(T.inkSubtle)
                 } else {
                     VStack(alignment: .leading, spacing: T.s3) {
                         ForEach(Array(stride(from: 0, to: cams.count, by: 3)), id: \.self) { start in

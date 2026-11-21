@@ -15,8 +15,8 @@ struct StageScanWindow: View {
 
     var body: some View {
         Page {
-            PageHeader(title: "Stage scan", purpose: "With everyone in place, find each person, name them, and save a shot of them on every camera.",
-                       help: "Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and Churchfront Video saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck.")
+            PageHeader(title: "Stage scan", purpose: tr("With everyone in place, find each person, name them, and save a shot of them on every camera.", es: "Con todos en su lugar, encontrá a cada persona, nombrala y guardá una toma suya en cada cámara."),
+                       help: tr("Each camera that isn't on Live goes to a wide shot, finds the people in it, and comes back. Label each person, and Churchfront Video saves a shot of them on every camera that saw them and can follow them by name for the rest of the day.\n\nThe wide shot is a camera's shot named Stage or Wide if it has one. Otherwise it's where the camera points now, zoomed all the way out. A tighter Stage shot makes people bigger in the picture and easier to find.\n\nThe shots are for where people stood during the scan, so run it at rehearsal or soundcheck.", es: "Cada cámara que no está en Live va a un plano general, encuentra a las personas y vuelve. Etiquetá a cada persona y Churchfront Video guarda una toma suya en cada cámara que la vio, y puede seguirla por nombre el resto del día.\n\nEl plano general es la toma de la cámara llamada Stage o Wide, si la tiene. Si no, es hacia donde apunta la cámara ahora, con el zoom todo abierto. Una toma Stage más cerrada hace más grandes a las personas y más fáciles de encontrar.\n\nLas tomas valen para donde estaba cada persona durante el escaneo, así que hacelo en el ensayo o la prueba de sonido."))
             HStack(alignment: .top, spacing: T.s4) {
                 step(1, "Cameras") {
                     if cameras.isEmpty {
@@ -43,7 +43,7 @@ struct StageScanWindow: View {
                         }
                         .buttonStyle(CueButton(kind: .primary))
                         .disabled(scan.running || ready == 0)
-                        .help("Moves each camera marked \"Will go wide and come back\". Cameras on Live don't move.")
+                        .help(tr("Moves each camera marked \"Will go wide and come back\". Cameras on Live don't move.", es: "Mueve cada cámara marcada \"Will go wide and come back\". Las cámaras en Live no se mueven."))
                         if scan.running {
                             ProgressView().controlSize(.small)
                             Text(scan.progress).font(.sans(12)).foregroundStyle(T.inkMuted)
@@ -64,7 +64,7 @@ struct StageScanWindow: View {
                                                : "The last scan found no one. Check the notes above, then scan again.")
                         .font(.sans(13)).foregroundStyle(T.inkMuted)
                 } else {
-                    Text("Type a name or a role under each person. The letter is Churchfront Video's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.")
+                    Text(tr("Type a name or a role under each person. The letter is Churchfront Video's guess at the same person on another camera: naming one fills in the others with that letter. Fix any it got wrong, and leave a person blank to skip them.", es: "Escribí un nombre o un rol debajo de cada persona. La letra es la suposición de Churchfront Video de que es la misma persona en otra cámara: al nombrar una se completan las otras con esa letra. Corregí las que se equivocó, y dejá vacía a una persona para saltearla."))
                         .font(.sans(12)).foregroundStyle(T.inkMuted).fixedSize(horizontal: false, vertical: true)
                     ForEach(cameras.filter { c in scan.people.contains { $0.camera == c.id } }) { c in
                         VStack(alignment: .leading, spacing: T.s2) {
@@ -78,7 +78,7 @@ struct StageScanWindow: View {
                         Button("Save shots and names") { saved = scan.save() }
                             .buttonStyle(CueButton(kind: .primary))
                             .disabled(scan.people.allSatisfy { $0.label.trimmingCharacters(in: .whitespaces).isEmpty })
-                        Text("Replaces the shots from the last scan. Shots you made yourself are kept.")
+                        Text(tr("Replaces the shots from the last scan. Shots you made yourself are kept.", es: "Reemplaza las tomas del último escaneo. Las tomas que hiciste vos se conservan."))
                             .font(.sans(12)).foregroundStyle(T.inkSubtle)
                     }
                     ForEach(saved, id: \.self) { line in Text(line).font(.sans(12, .semibold)).foregroundStyle(T.success) }
@@ -87,7 +87,7 @@ struct StageScanWindow: View {
             if !cast.names.isEmpty {
                 Card(title: "Can follow by name") {
                     Text(cast.names.joined(separator: ", ")).font(.sans(13, .semibold))
-                    Text("On Operate, under Track, choose Follow by name. This lasts until Churchfront Video quits or the next scan is saved.")
+                    Text(tr("On Operate, under Track, choose Follow by name. This lasts until Churchfront Video quits or the next scan is saved.", es: "En Operate, bajo Track, elegí Follow by name. Dura hasta que Churchfront Video se cierre o se guarde el próximo escaneo."))
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
@@ -133,10 +133,10 @@ private struct PersonCard: View {
                 Button("Try the shot") { ptz.go(to: PTZShot(name: "", person.shot), camera: camera.id) }
                     .buttonStyle(CueButton(kind: .quiet))
                     .disabled(scan.running || scan.blocked(camera) != nil)
-                    .help(scan.blocked(camera).map { "\(camera.name) can't move now: \($0)." } ?? "Send \(camera.name) to this shot to check it")
+                    .help(scan.blocked(camera).map { tr("\(camera.name) can't move now: \($0).", es: "\(camera.name) no puede moverse ahora: \($0).") } ?? tr("Send \(camera.name) to this shot to check it", es: "Mandar \(camera.name) a esta toma para revisarla"))
                 if person.rough {
                     Text("size is a guess").font(.sans(10)).foregroundStyle(T.warning)
-                        .help("Only this person's outline was found, so how tight the shot is was estimated. Try the shot and adjust.")
+                        .help(tr("Only this person's outline was found, so how tight the shot is was estimated. Try the shot and adjust.", es: "Solo se encontró el contorno de esta persona, así que el cierre del plano es una estimación. Probá la toma y ajustala."))
                 }
             }
         }

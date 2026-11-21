@@ -35,7 +35,7 @@ struct VolunteerView: View {
                         // Exposure for the camera on Next, shown when wanted, so the shot grid
                         // gets the room the rest of the time.
                         PillButton(title: "Exposure", icon: "camera.aperture", active: showExposure) { showExposure.toggle() }
-                            .help(showExposure ? "Hide exposure" : "Show gain, shutter, iris and white balance for the camera on Next")
+                            .help(showExposure ? tr("Hide exposure", es: "Ocultar exposición") : tr("Show gain, shutter, iris and white balance for the camera on Next", es: "Mostrar ganancia, obturador, iris y balance de blancos de la cámara que está en Next"))
                     }
                     HStack(alignment: .top, spacing: T.s4) {
                         if showExposure { ExposurePanel() }
@@ -256,7 +256,7 @@ struct SourceTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .help("Put \(store.label(source.input, atem.state)) on Next")
+        .help(tr("Put \(store.label(source.input, atem.state)) on Next", es: "Poner \(store.label(source.input, atem.state)) en Next"))
     }
 
     func badge(_ s: String, _ c: Color) -> some View {
@@ -333,7 +333,7 @@ struct CameraSpeedDial: View {
                 .buttonStyle(.borderless).font(.sans(11)).foregroundStyle(T.inkSubtle)
                 .opacity(abs(value - 1) < 0.01 ? 0 : 1)
         }
-        .help("Camera speed for the joystick, zoom and arrow keys. Slow it down for fine framing on a tight shot.")
+        .help(tr("Camera speed for the joystick, zoom and arrow keys. Slow it down for fine framing on a tight shot.", es: "Velocidad de la cámara para el joystick, el zoom y las flechas. Bajala para encuadrar fino en un plano cerrado."))
         .onAppear { value = store.config.ptzSpeed }
         .onChange(of: store.config.ptzSpeed) { _, v in value = v }
     }
@@ -364,7 +364,7 @@ struct NextCameraHeader: View {
         .padding(.horizontal, T.s3).frame(height: 32)
         .background(RoundedRectangle(cornerRadius: T.rMD).fill(T.surfaceSunken))
         .overlay(RoundedRectangle(cornerRadius: T.rMD).stroke(cam == nil ? T.line : T.preview, lineWidth: cam == nil ? 1 : 2))
-        .help("Exposure and saved shots below act on the camera that's on Next.")
+        .help(tr("Exposure and saved shots below act on the camera that's on Next.", es: "La exposición y las tomas guardadas de abajo actúan sobre la cámara que está en Next."))
     }
 }
 
@@ -418,7 +418,7 @@ struct ExposureShots: View {
                 Label("Save exposure", systemImage: "plus").font(.sans(11, .bold)).foregroundStyle(T.accentStrong)
             }
             .buttonStyle(.plain)
-            .help("Save \(camera.name)'s exposure now (gain, shutter, iris and white balance) as a shot")
+            .help(tr("Save \(camera.name)'s exposure now (gain, shutter, iris and white balance) as a shot", es: "Guardar ahora la exposición de \(camera.name) (ganancia, obturador, iris y balance de blancos) como una toma"))
             .popover(isPresented: $saving, arrowEdge: .top) { savePopover }
             ScrollView {
                 VStack(spacing: 4) {
@@ -488,7 +488,7 @@ struct ExposureShots: View {
     var savePopover: some View {
         VStack(alignment: .leading, spacing: T.s3) {
             Text("Save \(camera.name)'s exposure").font(.sans(14, .bold))
-            Text("Gain, shutter, iris and white balance, as the camera has them now.").font(.sans(12)).foregroundStyle(T.inkMuted)
+            Text(tr("Gain, shutter, iris and white balance, as the camera has them now.", es: "Ganancia, obturador, iris y balance de blancos, como los tiene la cámara ahora.")).font(.sans(12)).foregroundStyle(T.inkMuted)
             TextField("Bright stage", text: $newName).textFieldStyle(.roundedBorder).onSubmit(save)
             HStack {
                 Spacer()
@@ -535,7 +535,7 @@ struct ExposureControls: View {
                 }
                 .buttonStyle(PressStyle())
                 .disabled(e.allAuto)
-                .help("Let the camera set gain, shutter and iris itself")
+                .help(tr("Let the camera set gain, shutter and iris itself", es: "Dejar que la cámara ajuste sola ganancia, obturador e iris"))
             }
         }
         .frame(width: 200)
@@ -555,11 +555,11 @@ struct ExposureControls: View {
         }
         return HStack(spacing: 4) {
             Text(label).font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle).frame(width: 46, alignment: .leading)
-            stepButton("sun.min", "Darker") { step(false) }
+            stepButton("sun.min", tr("Darker", es: "Más oscuro")) { step(false) }
             Text(auto ? "Auto" : text).font(.sans(13, .semibold)).monospacedDigit()
                 .frame(maxWidth: .infinity).frame(height: 28)
                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
-            stepButton("sun.max", "Brighter") { step(true) }
+            stepButton("sun.max", tr("Brighter", es: "Más claro")) { step(true) }
         }
         .disabled(list.isEmpty)
     }
@@ -580,7 +580,7 @@ struct ExposureControls: View {
         let others = ptz.cameras.filter { $0.id != camera.id && ptz.exposure[$0.id]?.value.wb != nil }
         return HStack(spacing: 4) {
             Text("White").font(.sans(11, .semibold)).foregroundStyle(T.inkSubtle).frame(width: 46, alignment: .leading)
-            stepButton("snowflake", "Cooler (bluer)") { step(false) }
+            stepButton("snowflake", tr("Cooler (bluer)", es: "Más frío (más azul)")) { step(false) }
             Menu {
                 Button("Auto") { ptz.setExposure(PTZExposure(wb: "auto"), camera: camera.id) }
                 Button("Daylight") { ptz.setExposure(PTZExposure(wb: "daylight"), camera: camera.id) }
@@ -604,8 +604,8 @@ struct ExposureControls: View {
                     .background(RoundedRectangle(cornerRadius: T.rSM).fill(T.surfaceSunken))
             }
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
-            .help("White balance. Pick auto, daylight, tungsten, a color temperature, or match another camera.")
-            stepButton("flame", "Warmer (more orange)") { step(true) }
+            .help(tr("White balance. Pick auto, daylight, tungsten, a color temperature, or match another camera.", es: "Balance de blancos. Elegí automático, luz de día, tungsteno, una temperatura de color, o igualar a otra cámara."))
+            stepButton("flame", tr("Warmer (more orange)", es: "Más cálido (más naranja)")) { step(true) }
         }
         .disabled(list.isEmpty && e.value.wb == nil)
     }
@@ -682,7 +682,7 @@ struct PresetGrid: View {
                 deletingPreset = nil
             }
         } message: {
-            Text("This removes it from the camera itself, for every controller that uses it. It can't be undone.")
+            Text(tr("This removes it from the camera itself, for every controller that uses it. It can't be undone.", es: "Esto la quita de la propia cámara, para todos los controladores que la usan. No se puede deshacer."))
         }
         .confirmationDialog(liveQuestion, isPresented: Binding(get: { liveMove != nil }, set: { if !$0 { liveMove = nil } })) {
             Button("Move it on Live", role: .destructive) { liveMove?.run(); liveMove = nil }
@@ -712,7 +712,7 @@ struct PresetGrid: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
-            .help("Put \(c.name) on Next")
+            .help(tr("Put \(c.name) on Next", es: "Poner \(c.name) en Next"))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(c.shots.filter { $0.kind == .position }) { s in
@@ -745,7 +745,7 @@ struct PresetGrid: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(PressStyle())
-                        .help("Save where \(c.name) is now as a new shot")
+                        .help(tr("Save where \(c.name) is now as a new shot", es: "Guardar adonde apunta \(c.name) ahora como una toma nueva"))
                         .popover(isPresented: Binding(get: { savingFor == c.id }, set: { if !$0 { savingFor = nil } }), arrowEdge: .top) {
                             savePopover(c)
                         }
@@ -859,7 +859,7 @@ struct TakePanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
-                .help("Fade from Live to Next (Return)")
+                .help(tr("Fade from Live to Next (Return)", es: "Fundido de Live a Next (Return)"))
                 Button { atem.cut(me: me) } label: {
                     VStack(spacing: 2) {
                         Text("CUT").font(.sans(24, .bold))
@@ -872,7 +872,7 @@ struct TakePanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
-                .help("Switch to Next instantly (Space)")
+                .help(tr("Switch to Next instantly (Space)", es: "Pasar a Next al instante (Space)"))
             }
             // Under them, the things that are on or off: black, then keys such as lower
             // thirds. Lit while on air, press to turn on or off.
@@ -880,12 +880,12 @@ struct TakePanel: View {
                 let ftb = s.ftbInTransition[me] ?? false
                 PanelButton(title: "BLACK", subtitle: black ? "IN BLACK" : (ftb ? "FADING" : "OFF"), lit: black || ftb ? T.program : nil,
                             width: 121, height: 48, titleSize: 14, blink: black) { atem.fadeToBlack(me: me) }
-                    .help(black ? "Fade back up from black" : "Fade everything to black")
+                    .help(black ? tr("Fade back up from black", es: "Volver del negro con fundido") : tr("Fade everything to black", es: "Fundir todo a negro"))
                 ForEach(store.config.keys) { k in
                     let on = k.isOn(s)
                     PanelButton(title: k.label.uppercased(), subtitle: on ? "ON AIR" : "OFF", lit: on ? T.program : nil,
                                 width: 121, height: 48, titleSize: 13) { k.toggle(atem) }
-                        .help(on ? "Take \(k.label) off (\(k.target))" : "Put \(k.label) on (\(k.target))")
+                        .help(on ? tr("Take \(k.label) off (\(k.target))", es: "Sacar \(k.label) (\(k.target))") : tr("Put \(k.label) on (\(k.target))", es: "Poner \(k.label) (\(k.target))"))
                 }
             }
         }
@@ -918,8 +918,8 @@ struct TrackButton: View {
             }
             .buttonStyle(PressStyle())
             .disabled(CameraPicture.of(camera, store) == nil)
-            .help(s == nil ? "Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking."
-                           : "Stop following. Moving the joystick or recalling a shot also stops it.")
+            .help(s == nil ? tr("Follow the person in the middle of the shot. Or click someone on the Next picture. Moving the joystick stops tracking.", es: "Seguir a la persona del centro del plano. O hacé clic en alguien en la imagen de Next. Mover el joystick detiene el seguimiento.")
+                           : tr("Stop following. Moving the joystick or recalling a shot also stops it.", es: "Dejar de seguir. Mover el joystick o llamar a una toma también lo detiene."))
             if let s {
                 // The follow shot: tap to reframe. The highlighted one is what it's framing to.
                 HStack(spacing: 2) {
@@ -931,7 +931,7 @@ struct TrackButton: View {
                                 .background(RoundedRectangle(cornerRadius: T.rSM).fill(s.size == z ? T.accent : T.surfaceSunken))
                         }
                         .buttonStyle(PressStyle())
-                        .help("Frame \(z.name.lowercased())")
+                        .help(tr("Frame \(z.name.lowercased())", es: "Encuadrar \(z.name.lowercased())"))
                     }
                 }
                 // Follow speed, right here so it can be nudged during a service.
@@ -943,7 +943,7 @@ struct TrackButton: View {
                         .foregroundStyle(T.ink).frame(width: 36)
                     speedButton("plus", 0.25)
                 }
-                .help("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.")
+                .help(tr("How quickly tracking cameras follow. Raise it if the camera falls behind, lower it if it overshoots.", es: "Qué tan rápido siguen las cámaras con seguimiento. Subila si la cámara se queda atrás, bajala si se pasa."))
                 Text([TrackingBadge.words(s.phase), s.person, s.phase == .following ? s.size.name : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.sans(11, .semibold))
                     .foregroundStyle(s.phase == .following ? T.accent : T.warning)
@@ -959,7 +959,7 @@ struct TrackButton: View {
                     }
                     .menuStyle(.borderlessButton).fixedSize()
                     .disabled(CameraPicture.of(camera, store) == nil)
-                    .help("Follow someone labelled in the stage scan")
+                    .help(tr("Follow someone labelled in the stage scan", es: "Seguir a alguien etiquetado en el stage scan"))
                 }
             }
         }
@@ -1006,6 +1006,6 @@ struct TrackingBadge: View {
             .background(Capsule().fill(phase == .following ? T.accent : T.warning))
         }
         .buttonStyle(PressStyle())
-        .help("Stop auto tracking")
+        .help(tr("Stop auto tracking", es: "Detener el seguimiento automático"))
     }
 }

@@ -164,6 +164,10 @@ The key (Copy key in Setup, New key to replace it) goes in the address or in an 
 
 Setup > Virtual cameras > Start with this Mac registers a launch agent that opens the app at login and opens it again if it crashes (launchd restarts it only after a crash; quitting it yourself keeps it quit). It needs the built app (`./build.sh`) and may ask you to allow it in System Settings > Login Items. For a Mac with no one at it, also set the Mac to log in by itself.
 
+### Language of the help texts
+
+The help texts (what a button does, what a setting is for, why something failed) come in English and Spanish. Pick **Español** or **English** at the right of the Setup tabs, or set `"language": "es"` (or `"en"`) in the setup file; with no choice it follows the Mac's language. Only the help changes: names of programs and technical terms (NDI, ATEM, vMix, UYVY…) and the labels on controls stay in English. In the code, a help text is `tr("English", es: "Español")`, and a test fails if one is left without its Spanish version.
+
 ## Stage scan
 
 **Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):

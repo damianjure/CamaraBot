@@ -24,11 +24,11 @@ enum EngineerSection: String, CaseIterable, Identifiable {
     }
     var note: String {
         switch self {
-        case .scan: return "People, labels, shots"
-        case .routing: return "Screens and buttons"
-        case .switcher: return "Keys, T-bar, macros, aux"
-        case .setup: return "Sources, keys, cameras"
-        case .status: return "Connections and log"
+        case .scan: return tr("People, labels, shots", es: "Personas, etiquetas, tomas")
+        case .routing: return tr("Screens and buttons", es: "Pantallas y botones")
+        case .switcher: return tr("Keys, T-bar, macros, aux", es: "Keys, T-bar, macros, aux")
+        case .setup: return tr("Sources, keys, cameras", es: "Fuentes, keys, cámaras")
+        case .status: return tr("Connections and log", es: "Conexiones y registro")
         }
     }
     var icon: String {

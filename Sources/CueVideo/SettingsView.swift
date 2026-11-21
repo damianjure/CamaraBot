@@ -290,7 +290,7 @@ struct SetupTab: View {
                        in: 0.5...4).frame(width: 240)
                 Text(String(format: "%.1f×", store.config.trackSpeed)).font(.system(size: 12, design: .monospaced)).foregroundStyle(T.inkMuted)
                     .frame(width: 40, alignment: .leading)
-                Text("Lower if the camera overshoots, higher if it falls behind.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                Text(tr("Lower if the camera overshoots, higher if it falls behind.", es: "Más bajo si la cámara se pasa, más alto si se queda atrás.")).font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
             labeled("Tilt") {
                 Toggle("", isOn: Binding(get: { store.config.trackTilt }, set: { v in store.update { $0.trackTilt = v } }))
@@ -300,7 +300,7 @@ struct SetupTab: View {
             labeled("Zoom") {
                 Toggle("", isOn: Binding(get: { store.config.trackZoom }, set: { v in store.update { $0.trackZoom = v } }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                Text("Zoom to hold the shot size as people move nearer or farther.").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                Text(tr("Zoom to hold the shot size as people move nearer or farther.", es: "Zoom para mantener el tamaño del plano cuando las personas se acercan o se alejan.")).font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
         }
         .frame(maxWidth: 760, alignment: .leading)
@@ -320,7 +320,7 @@ struct SetupTab: View {
                 .buttonStyle(CueButton())
             }
             if let e = store.fileError {
-                Text("The file has a problem, so Churchfront Video is still using the last good setup: \(e)")
+                Text(tr("The file has a problem, so Churchfront Video is still using the last good setup: \(e)", es: "El archivo tiene un problema, así que Churchfront Video sigue usando la última configuración buena: \(e)"))
                     .font(.sans(12, .semibold)).foregroundStyle(T.danger).fixedSize(horizontal: false, vertical: true)
             }
             if store.readOnly {
@@ -416,7 +416,7 @@ struct ShotEditor: View {
         DisclosureGroup(isExpanded: $open) {
             VStack(alignment: .leading, spacing: 6) {
                 if camera.shots.isEmpty {
-                    Text("No shots saved in Churchfront Video yet. Save one from the main window, or add one here from the camera as it is now.")
+                    Text(tr("No shots saved in Churchfront Video yet. Save one from the main window, or add one here from the camera as it is now.", es: "Todavía no hay tomas guardadas en Churchfront Video. Guardá una desde la ventana principal, o agregá una acá desde la cámara como está ahora."))
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
                 ForEach($camera.shots) { $s in
@@ -474,7 +474,7 @@ struct ShotEditor: View {
                 deletingPreset = nil
             }
         } message: {
-            Text("This removes it from the camera itself, for every controller that uses it. It can't be undone.")
+            Text(tr("This removes it from the camera itself, for every controller that uses it. It can't be undone.", es: "Esto la quita de la propia cámara, para todos los controladores que la usan. No se puede deshacer."))
         }
         .alert(problem ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
             Button("OK", role: .cancel) {}
@@ -709,7 +709,7 @@ struct AssistantSetup: View {
         Card(title: "Claude") {
             switch state {
             case .runFromDownloads:
-                Text("Move Churchfront Video to your Applications folder and open it from there, then come back here to connect Claude.")
+                Text(tr("Move Churchfront Video to your Applications folder and open it from there, then come back here to connect Claude.", es: "Mové Churchfront Video a tu carpeta Aplicaciones y abrilo desde ahí, y después volvé acá para conectar Claude."))
                     .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
             case .noClaude:
                 Text("Install the Claude desktop app first. It's free.").font(.sans(13))
@@ -726,7 +726,7 @@ struct AssistantSetup: View {
                 }
                 .buttonStyle(CueButton(kind: .primary))
             case .connected:
-                Text("Connected. Quit Claude (Claude > Quit) and open it again, then ask it something like:")
+                Text(tr("Connected. Quit Claude (Claude > Quit) and open it again, then ask it something like:", es: "Conectado. Cerrá Claude (Claude > Quit), abrilo de nuevo y pedile algo como:"))
                     .font(.sans(13)).fixedSize(horizontal: false, vertical: true)
                 Text(ClaudeConnect.firstPrompt).font(.sans(13, .semibold)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: T.s2) {
