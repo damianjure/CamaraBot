@@ -730,3 +730,35 @@ final class NDIGroupTests: XCTestCase {
         XCTAssertFalse(names().contains { $0.contains(hidden) })
     }
 }
+
+final class PictureGeometryTests: XCTestCase {
+    func testAWidePictureInASquareBoxIsLetterboxed() {
+        let r = PictureGeometry.fitted(CGSize(width: 1920, height: 1080), in: CGSize(width: 200, height: 200))
+        XCTAssertEqual(r.width, 200, accuracy: 1e-9)
+        XCTAssertEqual(r.height, 112.5, accuracy: 1e-9)
+        XCTAssertEqual(r.minY, 43.75, accuracy: 1e-9)
+    }
+
+    func testAClickMapsOntoThePictureWhateverItsShape() {
+        let box = CGSize(width: 400, height: 225)
+        let sixteenNine = CGSize(width: 1920, height: 1080)
+        XCTAssertEqual(PictureGeometry.normalized(CGPoint(x: 100, y: 56.25), image: sixteenNine, in: box)!.x, 0.25, accuracy: 1e-9)
+        // A 4:3 picture leaves bars at the sides: the middle of the box is the middle of the picture,
+        // and a click in a bar is no click on the picture.
+        let fourThree = CGSize(width: 1600, height: 1200)
+        let mid = PictureGeometry.normalized(CGPoint(x: 200, y: 112.5), image: fourThree, in: box)!
+        XCTAssertEqual(mid.x, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(mid.y, 0.5, accuracy: 1e-9)
+        XCTAssertNil(PictureGeometry.normalized(CGPoint(x: 5, y: 100), image: fourThree, in: box))
+    }
+
+    func testAPickedPointChoosesThePersonUnderIt() {
+        var follow = VirtualFollow(planner: CropPlanner(maxZoom: 2.5), framing: Framing(ShotSize.waist.standard))
+        func person(_ x: CGFloat) -> TrackedPerson {
+            TrackedPerson(box: CGRect(x: x - 0.05, y: 0.2, width: 0.1, height: 0.5), eye: CGPoint(x: x, y: 0.3), scale: 0.1)
+        }
+        follow.release(pick: CGPoint(x: 0.8, y: 0.4))
+        follow.update(people: [person(0.2), person(0.5), person(0.8)], now: Date())
+        XCTAssertEqual(follow.target?.eye.x ?? 0, 0.8, accuracy: 1e-9)
+    }
+}

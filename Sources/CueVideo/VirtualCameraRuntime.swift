@@ -42,6 +42,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var started = false
     private let createdAt = Date()
     private var dropWindow = DropWindow()
+    private var seen: (people: [CGRect], followed: CGRect?, at: Date) = ([], nil, .distantPast)
 
     /// Seconds since this camera was set up: a picture that hasn't come yet is not a fault in the first moments.
     var age: TimeInterval { Date().timeIntervalSince(createdAt) }
@@ -119,6 +120,15 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         if let size { shot = size }
         framing = Framing(shot.standard.merged(config.framing[shot.rawValue]))
         follow.framing = framing
+    }
+
+    /// The people found in the last detection and the one being followed, as boxes (0 to 1, from
+    /// the top left of the whole picture), for the operator to see and click. Empty once the
+    /// detection is a moment old, or not running (a mode that doesn't follow).
+    func peopleSeen() -> (all: [CGRect], followed: CGRect?) {
+        lock.lock(); defer { lock.unlock() }
+        guard mode == .follow, Date().timeIntervalSince(seen.at) < 1.5 else { return ([], nil) }
+        return (seen.people, seen.followed)
     }
 
     func hold() {
@@ -263,6 +273,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
             if self.mode == .follow {
                 let goal = self.follow.update(people: people, now: Date())
                 self.motion.setGoal(goal)
+                self.seen = (people.map(\.box), self.follow.phase == .following ? self.follow.target?.box : nil, Date())
             }
             self.lock.unlock()
         }

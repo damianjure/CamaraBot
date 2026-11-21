@@ -80,17 +80,26 @@ struct VirtualOperatorTile: View {
         }
     }
 
-    /// The full picture with the crop drawn on it.
+    /// The full picture with the crop drawn on it, and the people found in it: click one to follow them.
     private func picture(_ runtime: VirtualCameraRuntime?, _ status: VirtualCameraRuntime.Status?) -> some View {
         ZStack {
             Color.black
             if let image = runtime?.preview() {
                 GeometryReader { g in
+                    let imageSize = CGSize(width: image.width, height: image.height)
+                    let area = PictureGeometry.fitted(imageSize, in: g.size)
+                    let people: (all: [CGRect], followed: CGRect?) = runtime?.peopleSeen() ?? (all: [], followed: nil)
                     ZStack(alignment: .topLeading) {
-                        Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fit)
-                            .frame(width: g.size.width, height: g.size.height)
-                        if let c = status?.crop { CropOutline(crop: c, size: g.size) }
+                        Image(decorative: image, scale: 1).resizable().frame(width: area.width, height: area.height)
+                            .position(x: area.midX, y: area.midY)
+                        if let c = status?.crop { CropOutline(crop: c, area: area) }
+                        PeopleOutlines(people: people.all, followed: people.followed, area: area)
                     }
+                    .contentShape(Rectangle())
+                    .gesture(SpatialTapGesture().onEnded { tap in
+                        if let p = PictureGeometry.normalized(tap.location, image: imageSize, in: g.size) { runtime?.followPerson(at: p) }
+                    })
+                    .help("Click a person to follow them")
                 }
             } else {
                 Text(runtime == nil ? "Starting…" : "Waiting for the picture").font(.sans(11)).foregroundStyle(T.inkSubtle)
@@ -120,20 +129,60 @@ struct VirtualOperatorTile: View {
     }
 }
 
-/// The crop (0 to 1, from the top left) drawn over the picture, with the rest dimmed.
+/// Where a picture of any shape sits inside a box that shows it whole (letterboxed), and how a
+/// click in the box maps back onto the picture.
+enum PictureGeometry {
+    static func fitted(_ image: CGSize, in box: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0, box.width > 0, box.height > 0 else { return CGRect(origin: .zero, size: box) }
+        let scale = min(box.width / image.width, box.height / image.height)
+        let w = image.width * scale, h = image.height * scale
+        return CGRect(x: (box.width - w) / 2, y: (box.height - h) / 2, width: w, height: h)
+    }
+
+    /// A point in the box as 0 to 1 across the picture from its top left, or nil when it falls outside the picture.
+    static func normalized(_ point: CGPoint, image: CGSize, in box: CGSize) -> CGPoint? {
+        let r = fitted(image, in: box)
+        guard r.width > 0, r.height > 0, r.contains(point) else { return nil }
+        return CGPoint(x: (point.x - r.minX) / r.width, y: (point.y - r.minY) / r.height)
+    }
+}
+
+/// The crop (0 to 1, from the top left of the picture) drawn over it, with the rest dimmed.
 struct CropOutline: View {
     let crop: CropRect
-    let size: CGSize
+    let area: CGRect
 
     var body: some View {
-        let r = CGRect(x: crop.x * size.width, y: crop.y * size.height, width: crop.w * size.width, height: crop.h * size.height)
+        let r = CGRect(x: area.minX + crop.x * area.width, y: area.minY + crop.y * area.height,
+                       width: crop.w * area.width, height: crop.h * area.height)
         ZStack {
             Path { p in
-                p.addRect(CGRect(origin: .zero, size: size))
+                p.addRect(area)
                 p.addRect(r)
             }
             .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
             Rectangle().stroke(T.accent, lineWidth: 2).frame(width: r.width, height: r.height).position(x: r.midX, y: r.midY)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A thin box around each person found, the followed one brighter.
+struct PeopleOutlines: View {
+    let people: [CGRect]
+    let followed: CGRect?
+    let area: CGRect
+
+    var body: some View {
+        ZStack {
+            ForEach(people.indices, id: \.self) { i in
+                let b = people[i]
+                let on = followed.map { $0 == b } ?? false
+                let r = CGRect(x: area.minX + b.minX * area.width, y: area.minY + b.minY * area.height,
+                               width: b.width * area.width, height: b.height * area.height)
+                Rectangle().stroke(on ? T.success : Color.white.opacity(0.55), lineWidth: on ? 2 : 1)
+                    .frame(width: r.width, height: r.height).position(x: r.midX, y: r.midY)
+            }
         }
         .allowsHitTesting(false)
     }
