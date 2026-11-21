@@ -64,7 +64,7 @@ final class ControlServer {
             var buf = got
             if let data { buf.append(data) }
             if let req = Self.parse(buf) {
-                self.handle(req) { status, body in self.reply(c, status, body) }
+                self.handle(req) { status, body in Self.reply(c, status, body) }
             } else if done || err != nil || buf.count > 4 << 20 {
                 c.cancel()
             } else {
@@ -76,7 +76,7 @@ final class ControlServer {
     struct Request { let method: String; let path: String; let headers: [String: String]; let body: Data }
 
     /// A whole request, or nil while more bytes are needed.
-    private static func parse(_ d: Data) -> Request? {
+    static func parse(_ d: Data) -> Request? {
         guard let end = d.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let head = String(decoding: d[d.startIndex..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
         let first = head.first?.split(separator: " ") ?? []
@@ -94,7 +94,7 @@ final class ControlServer {
                        body: d.subdata(in: bodyStart..<d.index(bodyStart, offsetBy: len)))
     }
 
-    private func reply(_ c: NWConnection, _ status: Int, _ body: Any) {
+    static func reply(_ c: NWConnection, _ status: Int, _ body: Any) {
         let data = (try? JSONSerialization.data(withJSONObject: body, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         let text = status == 200 ? "OK" : (status == 401 ? "Unauthorized" : (status == 404 ? "Not Found" : "Bad Request"))
         var head = "HTTP/1.1 \(status) \(text)\r\nContent-Type: application/json\r\nContent-Length: \(data.count)\r\nConnection: close\r\n\r\n"

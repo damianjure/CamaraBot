@@ -30,6 +30,9 @@ struct VirtualCamerasSetup: View {
             }
             Text("Only external capture devices are offered: this Mac's own camera can't be sent out as an NDI source.")
                 .font(.sans(12)).foregroundStyle(T.inkSubtle)
+            if !store.config.virtualCameras.isEmpty {
+                NetworkControlCard().frame(maxWidth: 760, alignment: .leading)
+            }
         }
         .onAppear { devices = CaptureFeed.devices() }
     }
@@ -363,5 +366,50 @@ private struct ShotNameField: View {
     private func save() {
         let n = draft.trimmingCharacters(in: .whitespaces)
         if n.isEmpty { draft = name } else if n != name { commit(n) }
+    }
+}
+
+/// Switch for steering the virtual cameras from other computers (vMix, Stream Deck), with the
+/// address to use and the key it needs.
+private struct NetworkControlCard: View {
+    @EnvironmentObject var store: ConfigStore
+    @State private var copied = false
+
+    private var host: String { (Host.current().localizedName ?? "this-mac").replacingOccurrences(of: " ", with: "-") + ".local" }
+
+    var body: some View {
+        Card(title: "Network control") {
+            VStack(alignment: .leading, spacing: T.s3) {
+                HStack(spacing: T.s3) {
+                    Toggle("", isOn: Binding(get: { store.config.networkControl },
+                                             set: { on in store.update { $0.networkControl = on } }))
+                        .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                    Text(store.config.networkControl ? "On: other computers can steer the virtual cameras" : "Off")
+                        .font(.sans(13)).foregroundStyle(store.config.networkControl ? T.ink : T.inkSubtle)
+                }
+                if store.config.networkControl {
+                    Text("http://\(host):\(NetworkControl.defaultPort)/camera/<camera name>/follow?key=<key>")
+                        .font(.sans(12)).textSelection(.enabled).foregroundStyle(T.inkMuted)
+                    Text("Also: wide, hold, follow/full, shot/<saved shot>, zoom/in, zoom/out, and /cameras for the list. It only steers; it can't change the setup.")
+                        .font(.sans(12)).foregroundStyle(T.inkSubtle)
+                    HStack(spacing: T.s2) {
+                        Button(copied ? "Copied" : "Copy key") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(NetworkControl.loadOrMakeKey(), forType: .string)
+                            copied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                        }.buttonStyle(CueButton())
+                        Button("New key") { NetworkControl.shared.renewKey(); copied = false }
+                            .buttonStyle(CueButton())
+                            .help("Replaces the key: anything using the old one stops working")
+                    }
+                    Text("Not encrypted: use it on a closed network, like a switch only the streaming computers are on.")
+                        .font(.sans(12)).foregroundStyle(T.warning)
+                } else {
+                    Text("Off by default. Switch it on to let vMix, Companion or a Stream Deck send simple web requests that steer a camera.")
+                        .font(.sans(12)).foregroundStyle(T.inkSubtle)
+                }
+            }
+        }
     }
 }

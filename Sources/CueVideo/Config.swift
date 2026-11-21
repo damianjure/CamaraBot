@@ -165,10 +165,13 @@ struct CueConfig: Codable, Equatable {
     var trackTuning = TrackTuning()
     /// Fixed USB cameras steered by cropping their picture and sent out over NDI (see VirtualCamera).
     var virtualCameras: [VirtualCamera] = []
+    /// Lets other computers on the network steer the virtual cameras with simple web requests
+    /// (vMix, Stream Deck), with a key. Off unless switched on (see NetworkControl).
+    var networkControl = false
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras, networkControl }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -188,6 +191,7 @@ struct CueConfig: Codable, Equatable {
         framing = try c.decodeIfPresent([String: FramingRule].self, forKey: .framing) ?? [:]
         trackTuning = try c.decodeIfPresent(TrackTuning.self, forKey: .trackTuning) ?? TrackTuning()
         virtualCameras = try c.decodeIfPresent([VirtualCamera].self, forKey: .virtualCameras) ?? []
+        networkControl = try c.decodeIfPresent(Bool.self, forKey: .networkControl) ?? false
     }
 }
 

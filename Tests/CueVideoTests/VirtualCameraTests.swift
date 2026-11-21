@@ -935,3 +935,63 @@ final class UYVYOutputTests: XCTestCase {
         for (seen, sent) in zip(pixel, [50, 100, 200]) { XCTAssertEqual(Int(seen), sent, accuracy: 12, "got \(pixel)") }
     }
 }
+
+final class NetworkControlTests: XCTestCase {
+    func testPathsBecomeActions() {
+        XCTAssertEqual(NetworkAction.route("/cameras"), .list)
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/follow"), .follow(camera: "Pulpit", size: nil))
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/follow/full"), .follow(camera: "Pulpit", size: "full"))
+        XCTAssertEqual(NetworkAction.route("/camera/Main%20stage/wide"), .wide(camera: "Main stage"))
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/hold"), .hold(camera: "Pulpit"))
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/shot/Lectern%201"), .shot(camera: "Pulpit", name: "Lectern 1"))
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/zoom/in"), .zoom(camera: "Pulpit", closer: true))
+        XCTAssertEqual(NetworkAction.route("/camera/Pulpit/zoom/out"), .zoom(camera: "Pulpit", closer: false))
+        // Anything else is nothing: no way to reach the setup or other tools from here.
+        for path in ["/", "/tools", "/call", "/camera", "/camera/Pulpit", "/camera/Pulpit/delete", "/camera/Pulpit/zoom/sideways", "/camera/Pulpit/shot"] {
+            XCTAssertNil(NetworkAction.route(path), path)
+        }
+    }
+
+    func testKeyComparison() {
+        XCTAssertTrue(NetworkControl.same("abc123", "abc123"))
+        XCTAssertFalse(NetworkControl.same("abc123", "abc124"))
+        XCTAssertFalse(NetworkControl.same("abc", "abc123"))
+        XCTAssertFalse(NetworkControl.same("", "abc"))
+    }
+
+    func testOverARealConnectionTheKeyDecidesAndTheCameraMoves() async throws {
+        var cam = VirtualCamera(name: "Pulpit", device: "none", ndiName: "Test Network")
+        cam.shots = [CropShot(name: "Lectern", crop: CropRect(x: 0.2, y: 0.2, w: 0.4, h: 0.4))]
+        let runtime = VirtualCameraRuntime(cam, config: CueConfig())
+        runtime.ensureGeometry(3840, 2160)
+        let port = UInt16.random(in: 30000...39000)
+        let net = NetworkControl(port: port, find: { _ in runtime }, key: "k-test-key")
+        net.start()
+        defer { net.stop() }
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        func get(_ path: String, header: String? = nil) async throws -> Int {
+            var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
+            if let header { req.setValue(header, forHTTPHeaderField: "x-cuevideo-key") }
+            return (try await URLSession.shared.data(for: req).1 as! HTTPURLResponse).statusCode
+        }
+        let noKey = try await get("/camera/Pulpit/hold")
+        let wrongKey = try await get("/camera/Pulpit/hold?key=nope")
+        XCTAssertEqual(noKey, 401)
+        XCTAssertEqual(wrongKey, 401)
+        XCTAssertEqual(runtime.currentMode, .follow)          // nothing moved without the key
+
+        let held = try await get("/camera/Pulpit/hold?key=k-test-key")
+        XCTAssertEqual(held, 200)
+        XCTAssertEqual(runtime.currentMode, .hold)
+        let wide = try await get("/camera/Pulpit/wide", header: "k-test-key")   // the header works too
+        XCTAssertEqual(wide, 200)
+        XCTAssertEqual(runtime.currentMode, .wide)
+        let shot = try await get("/camera/Pulpit/shot/lectern?key=k-test-key")
+        XCTAssertEqual(shot, 200)
+        let noShot = try await get("/camera/Pulpit/shot/Nowhere?key=k-test-key")
+        let unknown = try await get("/tools?key=k-test-key")
+        XCTAssertEqual(noShot, 404)
+        XCTAssertEqual(unknown, 404)
+    }
+}
