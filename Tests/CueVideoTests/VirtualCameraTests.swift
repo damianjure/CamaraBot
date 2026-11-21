@@ -762,3 +762,46 @@ final class PictureGeometryTests: XCTestCase {
         XCTAssertEqual(follow.target?.eye.x ?? 0, 0.8, accuracy: 1e-9)
     }
 }
+
+final class ManualFramingTests: XCTestCase {
+    private func runtime() -> VirtualCameraRuntime {
+        let r = VirtualCameraRuntime(VirtualCamera(name: "Pulpit", device: "none", ndiName: "Test Manual"), config: CueConfig())
+        r.ensureGeometry(3840, 2160)   // zoom limit 2.5: the crop is never shorter than 0.4
+        return r
+    }
+
+    func testDraggingCentersTheCropAndHoldsIt() {
+        let r = runtime()
+        r.frameManually(centerX: 0.5, centerY: 0.5, height: 0.5)
+        XCTAssertEqual(r.currentMode, .hold)
+        let c = r.status().crop
+        XCTAssertEqual(c.h, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(c.x + c.w / 2, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(c.y + c.h / 2, 0.5, accuracy: 1e-9)
+    }
+
+    func testTheCropNeverLeavesThePictureOrPassesTheZoomLimit() {
+        let r = runtime()
+        r.frameManually(centerX: 0, centerY: 1, height: 0.1)   // too tight, and in a corner
+        let c = r.status().crop
+        XCTAssertEqual(c.h, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(c.x, 0, accuracy: 1e-9)
+        XCTAssertEqual(c.y + c.h, 1, accuracy: 1e-9)
+    }
+
+    func testZoomingKeepsTheCentre() {
+        let r = runtime()
+        r.frameManually(centerX: 0.4, centerY: 0.5, height: 0.8)
+        r.zoomManually(by: 0.5)
+        let c = r.status().crop
+        XCTAssertEqual(c.h, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(c.x + c.w / 2, 0.4, accuracy: 1e-9)
+    }
+
+    func testSavedShotsGetTheNextFreeName() {
+        var cam = VirtualCamera(device: "d", ndiName: "n")
+        XCTAssertEqual(cam.nextShotName, "Shot 1")
+        cam.shots = [CropShot(name: "Shot 1", crop: .full), CropShot(name: "shot 3", crop: .full)]
+        XCTAssertEqual(cam.nextShotName, "Shot 2")
+    }
+}

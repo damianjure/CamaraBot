@@ -54,10 +54,18 @@ struct VirtualOperatorTile: View {
                     button("Wide", active: status?.mode == "wide") { runtime?.wide() }
                     button("Hold", active: status?.mode == "hold") { runtime?.hold() }
                 }
+                HStack(spacing: T.s2) {
+                    button("Zoom +", active: false) { runtime?.zoomManually(by: 0.85) }
+                    button("Zoom −", active: false) { runtime?.zoomManually(by: 1 / 0.85) }
+                    button("Save shot", active: false) { saveShot(runtime) }
+                        .help("Saves the crop as it is now, to go back to with one click")
+                    Text("Drag on the picture to frame it by hand").font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1)
+                }
                 if !cam.shots.isEmpty {
                     HStack(spacing: T.s2) {
                         ForEach(cam.shots) { shot in
                             button(shot.name, active: false) { runtime?.go(to: shot) }
+                                .contextMenu { Button("Remove \(shot.name)", role: .destructive) { removeShot(shot) } }
                         }
                     }
                 }
@@ -99,7 +107,13 @@ struct VirtualOperatorTile: View {
                     .gesture(SpatialTapGesture().onEnded { tap in
                         if let p = PictureGeometry.normalized(tap.location, image: imageSize, in: g.size) { runtime?.followPerson(at: p) }
                     })
-                    .help("Click a person to follow them")
+                    // Dragging puts the crop where the pointer is, and holds it there.
+                    .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { drag in
+                        if let p = PictureGeometry.normalized(drag.location, image: imageSize, in: g.size) {
+                            runtime?.frameManually(centerX: p.x, centerY: p.y)
+                        }
+                    })
+                    .help("Click a person to follow them. Drag to frame by hand.")
                 }
             } else {
                 Text(runtime == nil ? "Starting…" : "Waiting for the picture").font(.sans(11)).foregroundStyle(T.inkSubtle)
@@ -116,6 +130,22 @@ struct VirtualOperatorTile: View {
         guard let s else { return "Starting…" }
         if !s.captureLive { return s.problem ?? "No picture" }
         return s.steeringText
+    }
+
+    private func saveShot(_ runtime: VirtualCameraRuntime?) {
+        guard let runtime else { return }
+        let crop = runtime.currentCrop()
+        store.update { c in
+            guard let i = c.virtualCameras.firstIndex(where: { $0.id == cam.id }) else { return }
+            c.virtualCameras[i].shots.append(CropShot(name: c.virtualCameras[i].nextShotName, crop: crop))
+        }
+    }
+
+    private func removeShot(_ shot: CropShot) {
+        store.update { c in
+            guard let i = c.virtualCameras.firstIndex(where: { $0.id == cam.id }) else { return }
+            c.virtualCameras[i].shots.removeAll { $0.id == shot.id }
+        }
     }
 
     private func setShot(_ size: ShotSize) {

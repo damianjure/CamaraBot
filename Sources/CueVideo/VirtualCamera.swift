@@ -114,6 +114,12 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
 
     var shot: ShotSize { ShotSize(rawValue: shotSize) ?? .waist }
 
+    /// "Shot 1", "Shot 2"…: the first name not already used by a saved shot.
+    var nextShotName: String {
+        let used = Set(shots.map { $0.name.lowercased() })
+        return (1...).lazy.map { "Shot \($0)" }.first { !used.contains($0.lowercased()) } ?? "Shot"
+    }
+
     /// Group names as NDI wants them: comma separated, no spaces or empty names around them. Nil when none.
     static func cleanGroups(_ text: String?) -> String? {
         let names = (text ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

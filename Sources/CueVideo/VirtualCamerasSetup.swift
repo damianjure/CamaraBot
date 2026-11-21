@@ -172,6 +172,23 @@ struct VirtualCameraCard: View {
                 note("Seen in vMix and Zoom as \"\(Host.current().localizedName ?? "This Mac") (\(cam.ndiName))\".")
             }
 
+            labeled("Saved shots") {
+                if cam.shots.isEmpty {
+                    note("None yet. On Operate, frame the picture and press Save shot.")
+                } else {
+                    VStack(alignment: .leading, spacing: T.s2) {
+                        ForEach(cam.shots) { shot in
+                            HStack(spacing: T.s2) {
+                                ShotNameField(name: shot.name) { n in edit { c in
+                                    if let i = c.shots.firstIndex(where: { $0.id == shot.id }) { c.shots[i].name = n }
+                                } }
+                                IconButton(icon: "trash", help: "Remove \(shot.name)") { edit { $0.shots.removeAll { $0.id == shot.id } } }
+                            }
+                        }
+                    }
+                }
+            }
+
             labeled("Starts as") {
                 Segments(items: [("Follow", StartMode.follow), ("Wide", StartMode.wide)]
                             + (cam.shots.isEmpty ? [] : [("Saved shot", StartMode.shot)]),
@@ -300,5 +317,26 @@ private struct LiveStatus: View {
 
     private func steer(_ title: String, active: Bool, _ action: @escaping () -> Void) -> some View {
         Button(title, action: action).buttonStyle(CueButton(kind: active ? .primary : .secondary))
+    }
+}
+
+/// One saved shot's name: typed freely and saved on Return or when leaving the field.
+private struct ShotNameField: View {
+    let name: String
+    let commit: (String) -> Void
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Shot name", text: $draft).textFieldStyle(CueFieldStyle()).frame(width: 200).focused($focused)
+            .onSubmit { save() }
+            .onAppear { draft = name }
+            .onChange(of: name) { _, v in if !focused { draft = v } }
+            .onChange(of: focused) { _, now in if !now { save() } }
+    }
+
+    private func save() {
+        let n = draft.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty { draft = name } else if n != name { commit(n) }
     }
 }

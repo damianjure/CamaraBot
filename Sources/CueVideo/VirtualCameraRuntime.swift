@@ -122,6 +122,24 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         follow.framing = framing
     }
 
+    /// Frames the picture by hand from the operator's tile: the crop centered on a point of the
+    /// picture (0 to 1 from its top left), at this height as a share of the picture (the current
+    /// one when nil), kept inside the picture and the zoom limit. It holds there, no longer following.
+    func frameManually(centerX: Double, centerY: Double, height: Double? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        let planner = follow.planner
+        let h = planner.clampHeight(height ?? motion.currentGoal.h)
+        let w = planner.width(forHeight: h)
+        mode = .hold
+        motion.setGoal(planner.rect(x: centerX - w / 2, y: centerY - h / 2, height: h))
+    }
+
+    /// Zooms the manual framing in (a factor under 1 makes the crop smaller) or out, around where it is now.
+    func zoomManually(by factor: Double) {
+        let c = motion.currentGoal
+        frameManually(centerX: c.x + c.w / 2, centerY: c.y + c.h / 2, height: c.h * factor)
+    }
+
     /// The people found in the last detection and the one being followed, as boxes (0 to 1, from
     /// the top left of the whole picture), for the operator to see and click. Empty once the
     /// detection is a moment old, or not running (a mode that doesn't follow).
