@@ -436,7 +436,7 @@ private struct LaunchAtLoginCard: View {
                     Button("Open Login Items") { LaunchAtLogin.openLoginItems() }.buttonStyle(CueButton())
                 }
                 if let error { Text(error).font(.sans(12)).foregroundStyle(T.danger) }
-                Text(tr("Opens the app when you log in, and again if it crashes. Quitting it yourself keeps it quit. Set the Mac to log in by itself (Users & Groups) for a start with no one there.", es: "Abre la app al iniciar sesión, y de nuevo si se cierra por un error. Si la cerrás vos, queda cerrada. Para que arranque sin nadie, poné la Mac en inicio de sesión automático (Usuarios y grupos)."))
+                Text(tr("Opens the app when you log in, and again if it crashes. Quitting it yourself keeps it quit. If macOS started this copy, switching this off may close it. Set the Mac to log in by itself (Users & Groups) for a start with no one there.", es: "Abre la app al iniciar sesión, y de nuevo si se cierra por un error. Si la cerrás vos, queda cerrada. Si macOS abrió esta copia, apagar esto puede cerrarla. Para que arranque sin nadie, poné la Mac en inicio de sesión automático (Usuarios y grupos)."))
                     .font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
         }

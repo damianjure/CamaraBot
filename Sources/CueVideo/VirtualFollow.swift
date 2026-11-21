@@ -95,6 +95,12 @@ struct VirtualFollow {
         }
         guard case let .take(i, sure) = IdentityMatch.choose(candidates, reach: reach, gone: gone, model: .init()) else {
             phase = gone > holdLost ? .lost : .searching
+            // Long gone: forget them, so whoever is in the picture next (nearest the middle) is followed
+            // and not left unmatched for being across the stage. Until then it rests at the whole picture.
+            if gone > holdLost * 3 {
+                release()
+                follow = CropFollow(planner: planner)
+            }
             return goal
         }
         let next = people[i]

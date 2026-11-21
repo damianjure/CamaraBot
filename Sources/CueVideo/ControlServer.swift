@@ -88,6 +88,8 @@ final class ControlServer {
             }
         }
         let len = Int(headers["content-length"] ?? "0") ?? 0
+        // A length below zero or past what is accepted is no request: it must not reach the range below.
+        guard (0...(4 << 20)).contains(len) else { return Request(method: "", path: "", headers: [:], body: Data()) }
         let bodyStart = end.upperBound
         guard d.distance(from: bodyStart, to: d.endIndex) >= len else { return nil }
         return Request(method: String(first[0]), path: String(first[1]), headers: headers,

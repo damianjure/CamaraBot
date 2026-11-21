@@ -97,6 +97,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One copy at a time: a second one (from Finder, or from the login agent) would fight for the
+        // ports, the capture device, the NDI names and the setup file. Self-tests run beside the real app on purpose.
+        if !ProcessInfo.processInfo.environment.keys.contains(where: { $0.hasPrefix("CUEVIDEO_") }), let id = Bundle.main.bundleIdentifier,
+           let other = NSRunningApplication.runningApplications(withBundleIdentifier: id).first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+            other.activate()
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.appearance = NSAppearance(named: .darkAqua)
         NSApp.setActivationPolicy(.regular)
         // The Dock keeps an old icon for a rebuilt app at the same path, so set it outright.

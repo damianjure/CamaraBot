@@ -18,7 +18,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     /// The setup for this camera. Updated while it runs for anything but the pipeline (see VirtualCamera.pipeline).
     private(set) var camera: VirtualCamera
     // The parts of it the capture thread reads: they never change while it runs.
-    private let zoomOverride: Double?
+    private var zoomOverride: Double?
     private let outputHeight: Int
 
     private let feed: VideoInput
@@ -38,6 +38,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var framing: Framing
     private var geometry: (w: Int, h: Int)?
     private var detecting = false
+    private var steered = 0
     private var lastDetect = Date.distantPast
     private var started = false
     private let createdAt = Date()
@@ -46,6 +47,9 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var frameMs = 0.0
     private var detectMs = 0.0
     private var seen: (people: [CGRect], followed: CGRect?, at: Date) = ([], nil, .distantPast)
+
+    /// How many times something has steered it (an operator, the network, vMix): changes whenever one does.
+    var steeredCount: Int { lock.lock(); defer { lock.unlock() }; return steered }
 
     /// Seconds since this camera was set up: a picture that hasn't come yet is not a fault in the first moments.
     var age: TimeInterval { Date().timeIntervalSince(createdAt) }
@@ -108,6 +112,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         follow.release(pick: point)
         mode = .follow
+        steered += 1
     }
 
     /// Frames the follow mode as this shot (shoulders, waist or full length), or as the one it
@@ -119,8 +124,23 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         // A name learned while running (see CaptureFeedHub.feed).
         if cam.inputSource == nil, cam.videoFile == nil, cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
         // The capture thread reads the setup too (the start mode), so it changes under the lock.
-        lock.lock(); camera = cam; lock.unlock()
+        lock.lock()
+        let zoomChanged = cam.maxZoom != camera.maxZoom
+        camera = cam
+        if zoomChanged { zoomOverride = cam.maxZoom; applyZoomLimit() }
+        lock.unlock()
         frame(as: sizeChanged ? cam.shot : nil, config: config)
+    }
+
+    /// The zoom limit changed while running: a planner with the new limit, with the crop kept (and
+    /// brought inside the limit if it was past it), so the source going out is never reopened. Under the lock.
+    private func applyZoomLimit() {
+        guard let g = geometry else { return }
+        let zoom = zoomOverride ?? CropPlanner.maxZoom(inputHeight: g.h, outputHeight: outputHeight)
+        let planner = CropPlanner(sourceAspect: Double(g.w) / Double(g.h), outputAspect: 16.0 / 9, maxZoom: zoom)
+        motion.retarget(planner)
+        follow = VirtualFollow(planner: planner, framing: framing)
+        if mode == .follow { follow.release(pick: nil) }
     }
 
     func frame(as size: ShotSize? = nil, config: CueConfig) {
@@ -135,6 +155,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     /// one when nil), kept inside the picture and the zoom limit. It holds there, no longer following.
     func frameManually(centerX: Double, centerY: Double, height: Double? = nil) {
         lock.lock(); defer { lock.unlock() }
+        steered += 1
         let planner = follow.planner
         let h = planner.clampHeight(height ?? motion.currentGoal.h)
         let w = planner.width(forHeight: h)
@@ -160,12 +181,14 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func hold() {
         lock.lock(); defer { lock.unlock() }
         mode = .hold
+        steered += 1
         motion.setGoal(motion.advance(to: ProcessInfo.processInfo.systemUptime))
     }
 
     func wide(cut: Bool = false) {
         lock.lock(); defer { lock.unlock() }
         mode = .wide
+        steered += 1
         motion.setGoal(planner().fullRect, cut: cut)
     }
 
@@ -173,6 +196,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func go(to shot: CropShot, cut: Bool = false) {
         lock.lock(); defer { lock.unlock() }
         mode = .shot(shot.crop)
+        steered += 1
         motion.setGoal(shot.crop, cut: cut)
     }
 
@@ -346,6 +370,13 @@ final class VirtualCameras {
         if q.isEmpty { return runtimes.count == 1 ? runtimes.values.first : nil }
         return all.first { $0.camera.name.lowercased() == q || $0.camera.ndiName.lowercased() == q }
             ?? all.first { $0.camera.name.lowercased().contains(q) || $0.camera.ndiName.lowercased().contains(q) }
+    }
+
+    /// A virtual camera by exactly its name or NDI name (any case), for callers that mustn't guess.
+    func findExact(_ query: String?) -> VirtualCameraRuntime? {
+        let q = (query ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return nil }
+        return all.first { $0.camera.name.lowercased() == q || $0.camera.ndiName.lowercased() == q }
     }
 
     private func apply(_ config: CueConfig) {

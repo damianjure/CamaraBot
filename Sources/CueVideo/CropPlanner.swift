@@ -181,6 +181,17 @@ final class CropMotion: @unchecked Sendable {
         lastAt = nil
     }
 
+    /// A new zoom limit with the crop kept as it is: only a crop the new limit doesn't allow moves (at once).
+    func retarget(_ planner: CropPlanner) {
+        lock.lock(); defer { lock.unlock() }
+        self.planner = planner
+        let fitted = planner.fitted(goal)
+        if fitted != goal {
+            goal = fitted
+            x = SmoothDamp(value: goal.x); y = SmoothDamp(value: goal.y); h = SmoothDamp(value: goal.h)
+        }
+    }
+
     /// `cut` jumps there at once instead of easing.
     func setGoal(_ r: CropRect, cut: Bool = false) {
         lock.lock(); defer { lock.unlock() }

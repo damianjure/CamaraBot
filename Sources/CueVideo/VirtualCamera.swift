@@ -153,6 +153,6 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
     /// shot never drops a source that may be on air.
     var pipeline: String {
-        [device, videoFile ?? "", inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", sendUYVY ? "uyvy" : "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+        [device, videoFile ?? "", inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", sendUYVY ? "uyvy" : ""].joined(separator: "|")
     }
 }

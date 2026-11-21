@@ -8,6 +8,8 @@ struct VMixState: Equatable {
     /// Input numbers, counted from 1 as vMix does.
     var active: Int?
     var preview: Int?
+    /// Inputs shown as an overlay (a picture in picture, say): on air as well.
+    var overlays: [Int] = []
 
     enum Tally: Equatable { case program, preview, off }
 
@@ -17,9 +19,10 @@ struct VMixState: Equatable {
     func tally(ndiName: String) -> Tally? {
         let q = ndiName.lowercased().trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return nil }
-        let mine = inputs.filter { $0.title.lowercased().contains(q) }
+        // "COMPUTER (name)" or just "name": not any title that merely carries the same letters.
+        let mine = inputs.filter { let t = $0.title.lowercased(); return t == q || t.hasSuffix("(\(q))") }
         guard !mine.isEmpty else { return nil }
-        if mine.contains(where: { $0.number == active }) { return .program }
+        if mine.contains(where: { $0.number == active || overlays.contains($0.number) }) { return .program }
         if mine.contains(where: { $0.number == preview }) { return .preview }
         return .off
     }
@@ -30,12 +33,13 @@ struct VMixState: Equatable {
         let xml = XMLParser(data: data)
         xml.delegate = p
         guard xml.parse(), p.sawRoot else { return nil }
-        return VMixState(inputs: p.inputs, active: p.active, preview: p.preview)
+        return VMixState(inputs: p.inputs, active: p.active, preview: p.preview, overlays: p.overlays)
     }
 
     private final class Parser: NSObject, XMLParserDelegate {
         var inputs: [Input] = []
         var active: Int?, preview: Int?
+        var overlays: [Int] = []
         var sawRoot = false
         private var number: Int?, attrTitle = "", text = "", element = ""
 
@@ -57,6 +61,7 @@ struct VMixState: Equatable {
                 number = nil
             case "active": active = Int(t)
             case "preview": preview = Int(t)
+            case "overlay": if let n = Int(t) { overlays.append(n) }
             default: break
             }
             text = ""
@@ -114,7 +119,9 @@ final class VMixLink: ObservableObject {
         return URLSession(configuration: c)
     }()
     /// Cameras this link put at the whole picture. Only cameras that were following are ever rested, so following is what they go back to.
-    private var resting = Set<UUID>()
+    /// Each with the camera's steering count right after, so a camera the operator has touched since is left as they put it.
+    private var resting: [UUID: Int] = [:]
+    private var polling = false
 
     func attach(_ store: ConfigStore) {
         subscription = store.$config.map(\.vmix).removeDuplicates()
@@ -137,10 +144,12 @@ final class VMixLink: ObservableObject {
     }
 
     private func poll() {
-        guard let url = settings.url else { return }
+        // One question at a time: answers can't arrive out of order.
+        guard let url = settings.url, !polling else { return }
+        polling = true
         session.dataTask(with: url) { [weak self] data, _, _ in
             let parsed = data.flatMap(VMixState.parse)
-            DispatchQueue.main.async { self?.got(parsed) }
+            DispatchQueue.main.async { self?.polling = false; self?.got(parsed) }
         }.resume()
     }
 
@@ -172,9 +181,9 @@ final class VMixLink: ObservableObject {
             switch s.tally(ndiName: r.camera.ndiName) {
             case .off?:
                 // Only a camera still doing what the setup started it with is put to rest: one the operator is steering stays as it is.
-                if !resting.contains(id), r.currentMode == .follow { resting.insert(id); r.wide() }
+                if resting[id] == nil, r.currentMode == .follow { r.wide(); resting[id] = r.steeredCount }
             case .program?, .preview?, nil:
-                if resting.remove(id) != nil, r.currentMode == .wide { r.followPerson() }
+                if let n = resting.removeValue(forKey: id), n == r.steeredCount, r.currentMode == .wide { r.followPerson() }
             }
         }
     }
@@ -182,8 +191,8 @@ final class VMixLink: ObservableObject {
     private func wakeAll() {
         let all = cameras()
         for r in all {
-            if resting.remove(r.camera.id) != nil, r.currentMode == .wide { r.followPerson() }
+            if let n = resting.removeValue(forKey: r.camera.id), n == r.steeredCount, r.currentMode == .wide { r.followPerson() }
         }
-        resting = resting.filter { id in all.contains { $0.camera.id == id } }
+        resting = resting.filter { id, _ in all.contains { $0.camera.id == id } }
     }
 }

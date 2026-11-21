@@ -56,22 +56,31 @@ final class NetworkControl {
 
     let port: UInt16
     private let find: (String?) -> VirtualCameraRuntime?
+    private let all: () -> [VirtualCameraRuntime]
     private var config: () -> CueConfig
     /// A key given up front (tests), instead of the one kept in the support folder.
     private let fixedKey: String?
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "cuevideo.network-control")
     private var subscription: AnyCancellable?
-    private(set) var key = ""
+    private let keyLock = NSLock()
+    private var _key = ""
+    /// Read on the network queue and replaced from the main thread, so always under the lock.
+    private(set) var key: String {
+        get { keyLock.lock(); defer { keyLock.unlock() }; return _key }
+        set { keyLock.lock(); _key = newValue; keyLock.unlock() }
+    }
     private(set) var running = false
 
     init(port: UInt16 = NetworkControl.defaultPort,
-         find: @escaping (String?) -> VirtualCameraRuntime? = { VirtualCameras.shared.find($0) },
+         find: @escaping (String?) -> VirtualCameraRuntime? = { VirtualCameras.shared.findExact($0) },
+         all: @escaping () -> [VirtualCameraRuntime] = { VirtualCameras.shared.all },
          config: @escaping () -> CueConfig = { CueConfig() },
          key: String? = nil) {
         self.port = port
         self.fixedKey = key
         self.find = find
+        self.all = all
         self.config = config
     }
 
@@ -139,8 +148,20 @@ final class NetworkControl {
 
     // MARK: Requests
 
+    /// A request is a few hundred bytes: a connection that hasn't finished one in this long is dropped,
+    /// and only so many are open at once, so idle sockets can't use up the app's file descriptors.
+    static let idleTimeout = 5.0
+    static let maxConnections = 32
+    private var open = 0
+
     private func serve(_ c: NWConnection) {
+        guard open < Self.maxConnections else { c.cancel(); return }
+        open += 1
+        c.stateUpdateHandler = { [weak self] s in
+            if case .cancelled = s { self?.queue.async { self?.open -= 1 } }
+        }
         c.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + Self.idleTimeout) { c.cancel() }
         receive(c, Data())
     }
 
@@ -187,7 +208,7 @@ final class NetworkControl {
         func ok(_ text: String) -> (Int, [String: Any]) { (200, ["ok": true, "done": text]) }
         switch action {
         case .list:
-            let cams = VirtualCameras.shared.all.map { r -> [String: Any] in
+            let cams = all().map { r -> [String: Any] in
                 let s = r.status()
                 return ["name": r.camera.name, "mode": s.mode, "shot": s.shot, "live": s.captureLive, "saved_shots": r.camera.shots.map(\.name)]
             }
