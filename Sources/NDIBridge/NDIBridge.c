@@ -156,10 +156,14 @@ void *ndi_send_open_groups(const char *name, const char *groups) {
 }
 
 void ndi_send_frame(void *send, const uint8_t *bgra, int width, int height, int stride, int fps_n, int fps_d) {
+    ndi_send_frame_format(send, bgra, width, height, stride, fps_n, fps_d, 0);
+}
+
+void ndi_send_frame_format(void *send, const uint8_t *bgra, int width, int height, int stride, int fps_n, int fps_d, int uyvy) {
     if (!send || !f_send_video_v2) return;
     video_frame_v2_t v;
     memset(&v, 0, sizeof(v));
-    v.xres = width; v.yres = height; v.FourCC = FOURCC('B', 'G', 'R', 'A');
+    v.xres = width; v.yres = height; v.FourCC = uyvy ? FOURCC('U', 'Y', 'V', 'Y') : FOURCC('B', 'G', 'R', 'A');
     v.frame_rate_N = fps_n; v.frame_rate_D = fps_d; v.picture_aspect_ratio = (float)width / (float)height;
     v.frame_format_type = 1;    // progressive
     v.timecode = INT64_MAX;     // synthesize

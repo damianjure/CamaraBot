@@ -2,6 +2,7 @@ import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import CoreVideo
+import VideoToolbox
 import NDIBridge
 
 /// Sends one virtual camera's picture out over NDI: each captured frame is cropped to the
@@ -13,12 +14,17 @@ final class VirtualOutput: @unchecked Sendable {
     let size: OutputSize
     /// The NDI groups the source is announced in (see VirtualCamera.ndiGroups), or nil for the public one.
     let groups: String?
+    /// Sends UYVY (4:2:2) instead of BGRA: half the data to move, and what NDI works in anyway.
+    let uyvy: Bool
 
     private let queue = DispatchQueue(label: "cuevideo.virtual.output", qos: .userInteractive)
     private let lock = NSLock()
     private var busy = false
     private var sender: UnsafeMutableRawPointer?
     private var pool: CVPixelBufferPool?
+    // UYVY only: the picture is composed as BGRA, then converted (Core Image, set up for untouched video, won't write YUV).
+    private var bgraPool: CVPixelBufferPool?
+    private var transfer: VTPixelTransferSession?
     private var triedAt = Date.distantPast
     private var sentCount = 0, droppedCount = 0
     private var lastSent = Date.distantPast
@@ -26,10 +32,11 @@ final class VirtualOutput: @unchecked Sendable {
     /// Once closed it never sends again: a frame still in flight must not reopen the NDI source.
     private var closed = false
 
-    init(name: String, size: OutputSize, groups: String? = nil) {
+    init(name: String, size: OutputSize, groups: String? = nil, uyvy: Bool = false) {
         self.name = name
         self.size = size
         self.groups = groups
+        self.uyvy = uyvy
     }
 
     struct Stats {
@@ -63,6 +70,8 @@ final class VirtualOutput: @unchecked Sendable {
             closed = true
             if let s = sender { ndi_send_close(s); sender = nil }
             pool = nil
+            bgraPool = nil
+            if let t = transfer { VTPixelTransferSessionInvalidate(t); transfer = nil }
         }
     }
 
@@ -80,10 +89,16 @@ final class VirtualOutput: @unchecked Sendable {
         return s
     }
 
-    private func nextBuffer() -> CVPixelBuffer? {
+    private func nextBuffer(yuv: Bool = false) -> CVPixelBuffer? {
+        if yuv { return makeBuffer(&pool, kCVPixelFormatType_422YpCbCr8) }
+        if uyvy { return makeBuffer(&bgraPool, kCVPixelFormatType_32BGRA) }
+        return makeBuffer(&pool, kCVPixelFormatType_32BGRA)
+    }
+
+    private func makeBuffer(_ pool: inout CVPixelBufferPool?, _ format: OSType) -> CVPixelBuffer? {
         if pool == nil {
             let attrs: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferPixelFormatTypeKey as String: format,
                 kCVPixelBufferWidthKey as String: size.width,
                 kCVPixelBufferHeightKey as String: size.height,
                 kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
@@ -102,8 +117,8 @@ final class VirtualOutput: @unchecked Sendable {
         CVPixelBufferLockBaseAddress(out, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(out, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(out) else { return }
-        ndi_send_frame(sender, base.assumingMemoryBound(to: UInt8.self), Int32(size.width), Int32(size.height),
-                       Int32(CVPixelBufferGetBytesPerRow(out)), fps.n, fps.d)
+        ndi_send_frame_format(sender, base.assumingMemoryBound(to: UInt8.self), Int32(size.width), Int32(size.height),
+                              Int32(CVPixelBufferGetBytesPerRow(out)), fps.n, fps.d, uyvy ? 1 : 0)
         lock.lock(); sentCount += 1; lastSent = Date(); lock.unlock()
     }
 
@@ -127,6 +142,17 @@ final class VirtualOutput: @unchecked Sendable {
             image = f.outputImage ?? image.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
         }
         FrameTools.context.render(image, to: out, bounds: CGRect(x: 0, y: 0, width: size.width, height: size.height), colorSpace: nil)
-        return out
+        return uyvy ? convertToUYVY(out) : out
+    }
+
+    /// The BGRA picture as UYVY, with the colour matrix HD video uses (Rec. 709) written on the result.
+    private func convertToUYVY(_ bgra: CVPixelBuffer) -> CVPixelBuffer? {
+        if transfer == nil { VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &transfer) }
+        guard let transfer, let yuv = nextBuffer(yuv: true) else { return nil }
+        CVBufferSetAttachment(yuv, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(yuv, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(yuv, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
+        guard VTPixelTransferSessionTransferImage(transfer, from: bgra, to: yuv) == noErr else { return nil }
+        return yuv
     }
 }

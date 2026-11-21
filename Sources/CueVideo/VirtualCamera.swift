@@ -61,6 +61,8 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// group they look in, so this keeps it out of the public list. Nil is the public group.
     /// A group is a filter for who sees the source, not a password or encryption.
     var ndiGroups: String?
+    /// Send UYVY over NDI instead of BGRA (lighter on the wire; BGRA stays the default).
+    var sendUYVY = false
     /// The tightest zoom. Nil works it out from the input and output sizes.
     var maxZoom: Double?
     /// The shot the follow mode frames: "shoulders", "waist" or "full".
@@ -81,7 +83,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, videoFile, inputFormat, output, ndiName, ndiGroups, maxZoom, shotSize, shots, atemInput, startMode, startShot }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, videoFile, inputFormat, output, ndiName, ndiGroups, sendUYVY, maxZoom, shotSize, shots, atemInput, startMode, startShot }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -95,6 +97,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080
         ndiName = try c.decodeIfPresent(String.self, forKey: .ndiName) ?? name
+        sendUYVY = try c.decodeIfPresent(Bool.self, forKey: .sendUYVY) ?? false
         ndiGroups = Self.cleanGroups(try c.decodeIfPresent(String.self, forKey: .ndiGroups))
         maxZoom = try c.decodeIfPresent(Double.self, forKey: .maxZoom)
         shotSize = try c.decodeIfPresent(String.self, forKey: .shotSize) ?? "waist"
@@ -150,6 +153,6 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
     /// shot never drops a source that may be on air.
     var pipeline: String {
-        [device, videoFile ?? "", inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+        [device, videoFile ?? "", inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", sendUYVY ? "uyvy" : "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
     }
 }

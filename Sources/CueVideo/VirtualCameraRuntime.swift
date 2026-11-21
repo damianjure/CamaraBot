@@ -77,7 +77,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
             relinquish = { CaptureFeedHub.shared.release(f) }
         }
         blocked = camera.inputIsOwnOutput ? "This camera is set to take its own NDI output as its input. Pick the source your switcher or vMix sends." : nil
-        output = VirtualOutput(name: camera.ndiName, size: camera.output, groups: camera.ndiGroups)
+        output = VirtualOutput(name: camera.ndiName, size: camera.output, groups: camera.ndiGroups, uyvy: camera.sendUYVY)
         let planner = CropPlanner(maxZoom: camera.maxZoom ?? 1)
         motion = CropMotion(planner: planner)
         follow = VirtualFollow(planner: planner, framing: framing)

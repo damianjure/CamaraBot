@@ -873,3 +873,65 @@ final class VideoFileInputTests: XCTestCase {
         XCTAssertEqual(VirtualCameraRuntime.smoothed(10, 20), 10.5, accuracy: 1e-9)
     }
 }
+
+final class UYVYOutputTests: XCTestCase {
+    /// A solid BGRA frame of this colour, as a capture device would give it.
+    private func solid(_ b: UInt8, _ g: UInt8, _ r: UInt8, w: Int = 1920, h: Int = 1080) -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, w, h, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+        CVPixelBufferLockBaseAddress(buffer!, [])
+        let base = CVPixelBufferGetBaseAddress(buffer!)!.assumingMemoryBound(to: UInt8.self)
+        for i in 0..<(CVPixelBufferGetBytesPerRow(buffer!) * h / 4) { base[i * 4] = b; base[i * 4 + 1] = g; base[i * 4 + 2] = r; base[i * 4 + 3] = 255 }
+        CVPixelBufferUnlockBaseAddress(buffer!, [])
+        return buffer!
+    }
+
+    func testTheComposedFrameIsTwoBytesAPixel() {
+        let out = VirtualOutput(name: "UYVY compose", size: .p720, uyvy: true)
+        let frame = out.compose(solid(50, 100, 200), .full)
+        XCTAssertEqual(frame.map(CVPixelBufferGetPixelFormatType), kCVPixelFormatType_422YpCbCr8)
+        XCTAssertEqual(frame.map(CVPixelBufferGetWidth), 1280)
+        XCTAssertGreaterThanOrEqual(frame.map(CVPixelBufferGetBytesPerRow) ?? 0, 1280 * 2)
+    }
+
+    func testBGRAStaysTheDefault() {
+        XCTAssertFalse(VirtualCamera(device: "d", ndiName: "n").sendUYVY)
+        let out = VirtualOutput(name: "BGRA compose", size: .p720)
+        XCTAssertEqual(out.compose(solid(50, 100, 200), .full).map(CVPixelBufferGetPixelFormatType), kCVPixelFormatType_32BGRA)
+    }
+
+    /// Sent as UYVY over a real NDI loopback and received as BGRA: the colour must come back as it went in.
+    func testColourSurvivesTheTripOverNDI() throws {
+        guard ndi_load() != nil else { throw XCTSkip("The NDI runtime isn't installed.") }
+        let channel = "CueVideoUYVY\(Int.random(in: 1000...9999))"
+        let out = VirtualOutput(name: channel, size: .p720, uyvy: true)
+        let frame = solid(50, 100, 200)     // B 50, G 100, R 200
+        let sending = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "uyvy.send"))
+        sending.schedule(deadline: .now(), repeating: .milliseconds(33))
+        sending.setEventHandler { out.submit(frame, crop: .full, fps: (30, 1)) }
+        let stopped = DispatchSemaphore(value: 0)
+        sending.setCancelHandler { stopped.signal() }
+        sending.resume()
+        defer { sending.cancel(); stopped.wait(); out.close(); Thread.sleep(forTimeInterval: 0.2) }
+
+        let feed = NDIInputFeed(source: "ANY COMPUTER (\(channel))")
+        let got = XCTestExpectation(description: "a frame arrives")
+        let lock = NSLock()
+        var pixel: [UInt8] = []
+        let id = feed.subscribe { pixels in
+            lock.lock(); defer { lock.unlock() }
+            guard pixel.isEmpty else { return }
+            CVPixelBufferLockBaseAddress(pixels, .readOnly)
+            let mid = (CVPixelBufferGetHeight(pixels) / 2) * CVPixelBufferGetBytesPerRow(pixels) + (CVPixelBufferGetWidth(pixels) / 2) * 4
+            if let base = CVPixelBufferGetBaseAddress(pixels)?.assumingMemoryBound(to: UInt8.self) { pixel = [base[mid], base[mid + 1], base[mid + 2]] }
+            CVPixelBufferUnlockBaseAddress(pixels, .readOnly)
+            got.fulfill()
+        }
+        feed.start()
+        defer { feed.unsubscribe(id); feed.stop() }
+        wait(for: [got], timeout: 15)
+        lock.lock(); defer { lock.unlock() }
+        XCTAssertEqual(pixel.count, 3)
+        for (seen, sent) in zip(pixel, [50, 100, 200]) { XCTAssertEqual(Int(seen), sent, accuracy: 12, "got \(pixel)") }
+    }
+}

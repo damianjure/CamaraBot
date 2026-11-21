@@ -34,5 +34,7 @@ void *ndi_send_open(const char *name);
 /// can see the source; NULL or empty is the public group everyone looks in.
 void *ndi_send_open_groups(const char *name, const char *groups);
 void ndi_send_frame(void *send, const uint8_t *bgra, int width, int height, int stride, int fps_n, int fps_d);
+/// As ndi_send_frame, for a frame of UYVY (4:2:2, two bytes a pixel) when `uyvy` is not zero: half the data of BGRA.
+void ndi_send_frame_format(void *send, const uint8_t *data, int width, int height, int stride, int fps_n, int fps_d, int uyvy);
 void ndi_send_close(void *send);
 #endif

@@ -177,6 +177,12 @@ struct VirtualCameraCard: View {
                 note("Empty: anyone on the network sees it. Set one or more groups (comma separated) so only receivers looking in them do. It filters, it doesn't lock.")
             }
 
+            labeled("Colour format") {
+                Segments(items: [("BGRA", false), ("UYVY", true)],
+                         selection: Binding(get: { cam.sendUYVY }, set: { v in edit { $0.sendUYVY = v } }))
+                note("UYVY sends half the data and is what most NDI receivers work in. Leave BGRA unless the network is the limit.")
+            }
+
             labeled("NDI name") {
                 TextField("NDI name", text: $ndiDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .ndi)
                     .onSubmit { commitNDI() }
