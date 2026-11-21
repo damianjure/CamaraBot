@@ -29,6 +29,12 @@ struct CropShot: Codable, Hashable, Identifiable {
     }
 }
 
+/// How a virtual camera starts: following a person, the whole picture (a fixed general shot),
+/// or a saved shot.
+enum StartMode: String, Codable, CaseIterable, Hashable {
+    case follow, wide, shot
+}
+
 /// A fixed camera captured over USB and "steered" by cropping its picture, sent out over NDI for
 /// vMix, Zoom and the like. It lives in the setup file under "virtualCameras", and every key but
 /// `device` and `ndiName` is optional.
@@ -57,6 +63,10 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     var shots: [CropShot] = []
     /// Set when this output also feeds an ATEM input (through an NDI converter), for reference.
     var atemInput: Int?
+    /// How it starts when the app opens (and again after the input's picture size changes).
+    var startMode: StartMode = .follow
+    /// The saved shot to open on, when `startMode` is `.shot`.
+    var startShot: UUID?
 
     init(id: UUID = UUID(), name: String = "Virtual camera", device: String, ndiName: String) {
         self.id = id
@@ -65,7 +75,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput, startMode, startShot }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -82,6 +92,9 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         shotSize = try c.decodeIfPresent(String.self, forKey: .shotSize) ?? "waist"
         shots = try c.decodeIfPresent([CropShot].self, forKey: .shots) ?? []
         atemInput = try c.decodeIfPresent(Int.self, forKey: .atemInput)
+        // An unknown word in the setup file starts it following, like leaving it out.
+        startMode = ((try? c.decodeIfPresent(StartMode.self, forKey: .startMode)) ?? nil) ?? .follow
+        startShot = try c.decodeIfPresent(UUID.self, forKey: .startShot)
     }
 
     /// The NDI source in use, when the picture comes over NDI.
@@ -95,6 +108,16 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     }
 
     var shot: ShotSize { ShotSize(rawValue: shotSize) ?? .waist }
+
+    /// What the runtime does at the start: follow, hold the whole picture, or open on a saved
+    /// shot (following when that shot is gone).
+    var initialMode: VirtualMode {
+        switch startMode {
+        case .follow: return .follow
+        case .wide: return .wide
+        case .shot: return shots.first { $0.id == startShot }.map { .shot($0.crop) } ?? .follow
+        }
+    }
 
     /// The manual zoom limit the setup starts from: what the automatic limit gives for a 4K input
     /// sent out at 1080p (see CropPlanner.maxZoom).

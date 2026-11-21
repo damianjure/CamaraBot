@@ -165,6 +165,21 @@ struct VirtualCameraCard: View {
                 note("Seen in vMix and Zoom as \"\(Host.current().localizedName ?? "This Mac") (\(cam.ndiName))\".")
             }
 
+            labeled("Starts as") {
+                Segments(items: [("Follow", StartMode.follow), ("Wide", StartMode.wide)]
+                            + (cam.shots.isEmpty ? [] : [("Saved shot", StartMode.shot)]),
+                         selection: Binding(get: { cam.startMode }, set: { v in
+                    edit { $0.startMode = v; if v == .shot, $0.startShot == nil { $0.startShot = $0.shots.first?.id } }
+                }))
+                if cam.startMode == .shot, !cam.shots.isEmpty {
+                    MenuField(text: cam.shots.first { $0.id == cam.startShot }?.name ?? "Pick a shot", width: 160) {
+                        ForEach(cam.shots) { s in Button(s.name) { edit { $0.startShot = s.id } } }
+                    }
+                }
+                note(cam.startMode == .wide ? "Opens on the whole picture and stays there: a fixed general shot."
+                                            : "How it starts when the app opens.")
+            }
+
             labeled("Follow shot") {
                 Segments(items: ShotSize.allCases.map { ($0.short, $0.rawValue) },
                          selection: Binding(get: { cam.shotSize }, set: { v in edit { $0.shotSize = v } }))

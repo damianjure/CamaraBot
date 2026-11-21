@@ -613,3 +613,74 @@ final class NDIInputLoopbackTests: XCTestCase {
 
     private final class Box { let lock = NSLock(); var size: (Int, Int)?; var first: [UInt8] = [] }
 }
+
+final class StartModeTests: XCTestCase {
+    private let lectern = CropRect(x: 0.2, y: 0.2, w: 0.4, h: 0.4)
+
+    private func camera(_ mode: StartMode, shot: Bool = true, pickShot: Bool = true) -> VirtualCamera {
+        var cam = VirtualCamera(name: "Pulpit", device: "none", ndiName: "Test Start")
+        let s = CropShot(name: "Lectern", crop: lectern)
+        if shot { cam.shots = [s] }
+        cam.startMode = mode
+        if pickShot { cam.startShot = s.id }
+        return cam
+    }
+
+    func testItFollowsUnlessToldOtherwise() throws {
+        XCTAssertEqual(VirtualCamera(device: "d", ndiName: "n").startMode, .follow)
+        let cam = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"d","ndiName":"n"}"#.utf8))
+        XCTAssertEqual(cam.startMode, .follow)
+        XCTAssertNil(cam.startShot)
+    }
+
+    func testAnUnknownWordStartsFollowing() throws {
+        let cam = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"d","ndiName":"n","startMode":"sideways"}"#.utf8))
+        XCTAssertEqual(cam.startMode, .follow)
+    }
+
+    func testTheStartIsKeptInTheSetup() throws {
+        let cam = camera(.shot)
+        let back = try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam))
+        XCTAssertEqual(back.startMode, .shot)
+        XCTAssertEqual(back.startShot, cam.startShot)
+    }
+
+    func testTheInitialModeFollowsTheSetting() {
+        XCTAssertEqual(camera(.follow).initialMode, .follow)
+        XCTAssertEqual(camera(.wide).initialMode, .wide)
+        XCTAssertEqual(camera(.shot).initialMode, .shot(lectern))
+    }
+
+    func testAMissingShotStartsFollowing() {
+        XCTAssertEqual(camera(.shot, shot: false).initialMode, .follow)
+        XCTAssertEqual(camera(.shot, pickShot: false).initialMode, .follow)
+    }
+
+    func testChangingTheStartDoesNotRestartTheCamera() {
+        XCTAssertEqual(camera(.follow).pipeline, camera(.wide).pipeline)
+    }
+
+    func testAWideCameraOpensOnTheWholePictureAndStaysThere() {
+        let r = VirtualCameraRuntime(camera(.wide), config: CueConfig())
+        XCTAssertEqual(r.currentMode, .wide)
+        r.ensureGeometry(1920, 1080)
+        XCTAssertEqual(r.currentMode, .wide)
+        XCTAssertEqual(r.status().crop, .full)
+    }
+
+    func testAShotCameraOpensOnThatShot() {
+        let r = VirtualCameraRuntime(camera(.shot), config: CueConfig())
+        r.ensureGeometry(3840, 2160)
+        XCTAssertEqual(r.currentMode, .shot(lectern))
+        XCTAssertEqual(r.status().crop, lectern)
+    }
+
+    func testANewInputFormatGoesBackToTheStartMode() {
+        let r = VirtualCameraRuntime(camera(.wide), config: CueConfig())
+        r.ensureGeometry(3840, 2160)
+        r.followPerson()
+        XCTAssertEqual(r.currentMode, .follow)
+        r.ensureGeometry(1920, 1080)
+        XCTAssertEqual(r.currentMode, .wide)
+    }
+}

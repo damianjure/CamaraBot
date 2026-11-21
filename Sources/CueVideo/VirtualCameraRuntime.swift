@@ -51,6 +51,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
 
     init(_ camera: VirtualCamera, config: CueConfig) {
         self.camera = camera
+        mode = camera.initialMode
         zoomOverride = camera.maxZoom
         outputHeight = camera.output.height
         shot = camera.shot
@@ -108,7 +109,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         let sizeChanged = cam.shotSize != camera.shotSize
         // A name learned while running (see CaptureFeedHub.feed).
         if cam.inputSource == nil, cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
-        camera = cam
+        // The capture thread reads the setup too (the start mode), so it changes under the lock.
+        lock.lock(); camera = cam; lock.unlock()
         frame(as: sizeChanged ? cam.shot : nil, config: config)
     }
 
@@ -232,15 +234,10 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         let planner = CropPlanner(sourceAspect: Double(w) / Double(h), outputAspect: 16.0 / 9, maxZoom: zoom)
         motion.reset(planner)
         follow = VirtualFollow(planner: planner, framing: framing)
-        if first {
-            // Steered before the first frame (a shot, wide, hold): keep that, now the size is known.
-            switch mode {
-            case .shot(let crop): motion.setGoal(crop, cut: true)
-            case .wide, .hold, .follow: break
-            }
-        } else {
-            mode = .follow  // a new input format: start again from the widest shot, following
-        }
+        // Steered before the first frame (a shot, wide, hold): keep that. A new input format starts
+        // again the way the setup says (following, the whole picture, or a saved shot).
+        if !first { mode = camera.initialMode }
+        if case .shot(let crop) = mode { motion.setGoal(crop, cut: true) }
     }
 
     /// For tests and status: how it is being steered.
