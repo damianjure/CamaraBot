@@ -3,6 +3,7 @@ import NDIBridge
 import CoreGraphics
 import AVFoundation
 import CoreVideo
+import Network
 @testable import CueVideo
 
 /// The virtual PTZ: where the crop goes for a person, how it moves, and how it is set up.
@@ -1057,5 +1058,140 @@ final class HelpTextsAreTranslatedTests: XCTestCase {
             }
         }
         XCTAssertEqual(bare, [], "Help texts without a Spanish version (wrap them in tr(\"…\", es: \"…\")).")
+    }
+}
+
+final class VMixTests: XCTestCase {
+    /// The shape of vMix's /api answer: inputs with a number and a title, and the active and preview numbers.
+    private let xml = """
+    <vmix><version>27.0.0.50</version><edition>Pro</edition>
+    <inputs>
+      <input key="a1" number="1" type="Capture" title="Pulpit HDMI" state="Running" muted="False">Pulpit HDMI</input>
+      <input key="b2" number="2" type="NDI" title="MAC-M4 (Pulpit Tracked)" state="Running" muted="True">MAC-M4 (Pulpit Tracked)</input>
+      <input key="c3" number="3" type="NDI" title="MAC-M4 (Choir Tracked)" state="Running" muted="True">MAC-M4 (Choir Tracked)</input>
+    </inputs>
+    <overlays><overlay number="1"/></overlays>
+    <active>2</active><preview>3</preview><fadeToBlack>False</fadeToBlack></vmix>
+    """
+
+    func testReadsInputsAndWhatIsOnAir() throws {
+        let s = try XCTUnwrap(VMixState.parse(Data(xml.utf8)))
+        XCTAssertEqual(s.inputs.count, 3)
+        XCTAssertEqual(s.inputs[1], VMixState.Input(number: 2, title: "MAC-M4 (Pulpit Tracked)"))
+        XCTAssertEqual(s.active, 2)
+        XCTAssertEqual(s.preview, 3)
+    }
+
+    func testEachCameraIsMatchedByItsNDIName() throws {
+        let s = try XCTUnwrap(VMixState.parse(Data(xml.utf8)))
+        XCTAssertEqual(s.tally(ndiName: "Pulpit Tracked"), .program)
+        XCTAssertEqual(s.tally(ndiName: "choir tracked"), .preview)      // any case
+        XCTAssertNil(s.tally(ndiName: "Nave Tracked"))                    // vMix has no such input
+        XCTAssertNil(s.tally(ndiName: ""))
+        var s2 = s; s2.active = 1; s2.preview = nil
+        XCTAssertEqual(s2.tally(ndiName: "Pulpit Tracked"), .off)         // there, but not used
+    }
+
+    func testAnswerThatIsNotVMixIsRefused() {
+        XCTAssertNil(VMixState.parse(Data("<html><body>nope</body></html>".utf8)))
+        XCTAssertNil(VMixState.parse(Data("not xml".utf8)))
+        XCTAssertNil(VMixState.parse(Data()))
+    }
+
+    func testSettingsStayOffUntilSetUpAndBuildTheAddress() throws {
+        XCTAssertNil(VMixSettings().url)
+        var s = VMixSettings(); s.enabled = true
+        XCTAssertNil(s.url)                                                // no address yet
+        s.host = "192.168.1.50"
+        XCTAssertEqual(s.url?.absoluteString, "http://192.168.1.50:8088/api")
+        let d = try JSONDecoder().decode(VMixSettings.self, from: Data(#"{"enabled":true,"host":" vmix-pc ","port":99999}"#.utf8))
+        XCTAssertEqual(d.host, "vmix-pc")
+        XCTAssertEqual(d.port, 8088)                                       // out of range: the default
+        XCTAssertFalse(d.wideWhenOffAir)
+        XCTAssertEqual(try JSONDecoder().decode(CueConfig.self, from: Data("{}".utf8)).vmix, VMixSettings())
+    }
+
+    /// Against a real answer over HTTP, the way vMix gives it.
+    func testReadsAnAnswerOverHTTP() async throws {
+        let port = UInt16.random(in: 40000...49000)
+        let server = try FakeVMix(port: port, body: xml)
+        defer { server.stop() }
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/api")!)
+        XCTAssertEqual(VMixState.parse(data)?.active, 2)
+    }
+
+    private final class FakeVMix {
+        let listener: NWListener
+        init(port: UInt16, body: String) throws {
+            listener = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: port)!)
+            listener.newConnectionHandler = { c in
+                c.start(queue: .global())
+                c.receive(minimumIncompleteLength: 1, maximumLength: 4096) { _, _, _, _ in
+                    let head = "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n"
+                    c.send(content: Data((head + body).utf8), completion: .contentProcessed { _ in c.cancel() })
+                }
+            }
+            listener.start(queue: .global())
+        }
+        func stop() { listener.cancel() }
+    }
+}
+
+final class VMixRestTests: XCTestCase {
+    private func camera(_ name: String) -> VirtualCameraRuntime {
+        let r = VirtualCameraRuntime(VirtualCamera(name: name, device: "none", ndiName: "\(name) Tracked"), config: CueConfig())
+        r.ensureGeometry(1920, 1080)
+        return r
+    }
+
+    private func state(active: Int?, preview: Int?) -> VMixState {
+        VMixState(inputs: [.init(number: 1, title: "PC (Pulpit Tracked)"), .init(number: 2, title: "PC (Choir Tracked)")], active: active, preview: preview)
+    }
+
+    /// A link pointed at nothing in particular: only its logic is used, with answers handed to it.
+    private func link(_ cams: [VirtualCameraRuntime], rest: Bool) -> VMixLink {
+        let l = VMixLink()
+        l.cameras = { cams }
+        var s = VMixSettings(); s.enabled = true; s.host = "127.0.0.1"; s.port = 1; s.wideWhenOffAir = rest
+        l.apply(s)
+        return l
+    }
+
+    func testACameraVMixIsNotUsingRestsAndComesBack() {
+        let pulpit = camera("Pulpit"), choir = camera("Choir")
+        let l = link([pulpit, choir], rest: true)
+        defer { l.apply(VMixSettings()) }
+        l.got(state(active: 1, preview: nil))
+        XCTAssertEqual(pulpit.currentMode, .follow)       // on air: untouched
+        XCTAssertEqual(choir.currentMode, .wide)          // unused: at rest
+        l.got(state(active: 1, preview: 2))
+        XCTAssertEqual(choir.currentMode, .follow)        // next: back to following
+    }
+
+    func testACameraTheOperatorSteeredIsLeftAlone() {
+        let choir = camera("Choir")
+        choir.hold()
+        let l = link([choir], rest: true)
+        defer { l.apply(VMixSettings()) }
+        l.got(state(active: 1, preview: nil))
+        XCTAssertEqual(choir.currentMode, .hold)
+    }
+
+    func testNothingMovesWhenRestingIsOff() {
+        let choir = camera("Choir")
+        let l = link([choir], rest: false)
+        defer { l.apply(VMixSettings()) }
+        l.got(state(active: 1, preview: nil))
+        XCTAssertEqual(choir.currentMode, .follow)
+    }
+
+    func testSwitchingTheLinkOffGivesTheCamerasBack() {
+        let choir = camera("Choir")
+        let l = link([choir], rest: true)
+        l.got(state(active: 1, preview: nil))
+        XCTAssertEqual(choir.currentMode, .wide)
+        l.apply(VMixSettings())                           // off
+        XCTAssertEqual(choir.currentMode, .follow)
     }
 }

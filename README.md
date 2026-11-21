@@ -168,6 +168,10 @@ Setup > Virtual cameras > Start with this Mac registers a launch agent that open
 
 The help texts (what a button does, what a setting is for, why something failed) come in English and Spanish. Pick **Español** or **English** at the right of the Setup tabs, or set `"language": "es"` (or `"en"`) in the setup file; with no choice it follows the Mac's language. Only the help changes: names of programs and technical terms (NDI, ATEM, vMix, UYVY…) and the labels on controls stay in English. In the code, a help text is `tr("English", es: "Español")`, and a test fails if one is left without its Spanish version.
 
+### vMix link (read only)
+
+Setup > Virtual cameras > vMix reads which input vMix has on air, from its web controller (vMix Settings > Web Controller, port 8088; check that `http://<vMix PC>:8088/api` shows XML). Each camera is matched to a vMix input whose title carries the camera's NDI name, and its tile on Operate shows **ON AIR** or **NEXT**. With "Rest at the whole picture when vMix isn't using the camera" on, a camera that is neither on air nor next and is following goes to the whole picture, and goes back to following when vMix needs it; a camera you steered by hand is left alone. The link only reads: nothing is ever sent to vMix. If vMix stops answering for two seconds, or the link is switched off, rested cameras go back to following. In the setup file: `"vmix": { "enabled": true, "host": "192.168.1.50", "port": 8088, "wideWhenOffAir": false }`.
+
 ## Stage scan
 
 **Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):

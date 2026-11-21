@@ -32,6 +32,7 @@ struct VirtualCamerasSetup: View {
                 .font(.sans(12)).foregroundStyle(T.inkSubtle)
             if !store.config.virtualCameras.isEmpty {
                 NetworkControlCard().frame(maxWidth: 760, alignment: .leading)
+                VMixCard().frame(maxWidth: 760, alignment: .leading)
                 LaunchAtLoginCard().frame(maxWidth: 760, alignment: .leading)
             }
         }
@@ -454,5 +455,54 @@ private struct LaunchAtLoginCard: View {
     private func change(_ on: Bool) {
         do { try LaunchAtLogin.set(on); error = nil } catch { self.error = tr("Couldn't change it: \(error.localizedDescription)", es: "No se pudo cambiar: \(error.localizedDescription)") }
         state = LaunchAtLogin.current
+    }
+}
+
+/// Reads what is on air from the vMix machine, to show ON AIR / NEXT on each camera and, if asked, rest the others.
+private struct VMixCard: View {
+    @EnvironmentObject var store: ConfigStore
+    @ObservedObject private var vmix = VMixLink.shared
+    @State private var host = ""
+    @FocusState private var focused: Bool
+
+    private var settings: VMixSettings { store.config.vmix }
+
+    var body: some View {
+        Card(title: "vMix") {
+            VStack(alignment: .leading, spacing: T.s3) {
+                HStack(spacing: T.s3) {
+                    Toggle("", isOn: Binding(get: { settings.enabled }, set: { on in store.update { $0.vmix.enabled = on } }))
+                        .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                    TextField("vMix PC address", text: $host).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focused)
+                        .onSubmit { commit() }
+                    Text(status).font(.sans(12)).foregroundStyle(vmix.reachable ? T.success : T.inkSubtle)
+                }
+                if settings.enabled {
+                    HStack(spacing: T.s3) {
+                        Toggle("", isOn: Binding(get: { settings.wideWhenOffAir }, set: { on in store.update { $0.vmix.wideWhenOffAir = on } }))
+                            .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                        Text(tr("Rest at the whole picture when vMix isn't using the camera", es: "Quedar en la imagen completa cuando vMix no usa la cámara"))
+                            .font(.sans(12)).foregroundStyle(T.inkMuted)
+                    }
+                }
+                Text(tr("Reads which input is on air from vMix's web controller (Settings > Web Controller, port 8088), twice a second, and matches each camera by its NDI name. It only reads: it never sends anything to vMix. If vMix stops answering, cameras go back to following.",
+                        es: "Lee qué entrada está al aire desde la Web Controller de vMix (Settings > Web Controller, puerto 8088), dos veces por segundo, y empareja cada cámara por su nombre NDI. Solo lee: nunca le manda nada a vMix. Si vMix deja de responder, las cámaras vuelven a seguir."))
+                    .font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
+        }
+        .onAppear { host = settings.host }
+        .onChange(of: focused) { _, now in if !now { commit() } }
+    }
+
+    private var status: String {
+        guard settings.enabled else { return tr("Off", es: "Apagado") }
+        guard !settings.host.isEmpty else { return tr("Enter the address", es: "Poné la dirección") }
+        if vmix.reachable { return tr("Connected, \(vmix.state?.inputs.count ?? 0) inputs", es: "Conectado, \(vmix.state?.inputs.count ?? 0) entradas") }
+        return tr("Can't reach vMix", es: "No se puede alcanzar vMix")
+    }
+
+    private func commit() {
+        let h = host.trimmingCharacters(in: .whitespaces)
+        if h != settings.host { store.update { $0.vmix.host = h } }
     }
 }

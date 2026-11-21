@@ -40,6 +40,7 @@ struct VirtualOperatorTile: View {
             let info = VStack(alignment: .leading, spacing: T.s2) {
                 HStack(spacing: T.s2) {
                     Text(cam.name).font(.sans(13, .semibold)).foregroundStyle(T.ink).lineLimit(1)
+                    TallyBadge(ndiName: cam.ndiName)
                     Text(statusText(status)).font(.sans(12)).foregroundStyle(T.inkSubtle).lineLimit(1)
                 }
                 HStack(spacing: T.s2) {
@@ -215,5 +216,26 @@ struct PeopleOutlines: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// "ON AIR" or "NEXT" beside a camera's name when vMix says its picture is the one on air or ready.
+struct TallyBadge: View {
+    let ndiName: String
+    @ObservedObject private var vmix = VMixLink.shared
+
+    var body: some View {
+        switch vmix.tally(ndiName: ndiName) {
+        case .program?:
+            Text("ON AIR").font(.sans(10, .bold)).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Capsule().fill(T.program))
+                .help(tr("vMix has this camera on air", es: "vMix tiene esta cámara al aire"))
+        case .preview?:
+            Text("NEXT").font(.sans(10, .bold)).foregroundStyle(T.onAction).padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Capsule().fill(T.preview))
+                .help(tr("vMix has this camera ready in preview", es: "vMix tiene esta cámara lista en preview"))
+        default:
+            EmptyView()
+        }
     }
 }

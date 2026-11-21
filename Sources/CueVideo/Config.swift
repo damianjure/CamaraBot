@@ -170,10 +170,12 @@ struct CueConfig: Codable, Equatable {
     var networkControl = false
     /// The language of the help texts: "en" or "es". Missing: follows the Mac's language (see Lang).
     var language: String?
+    /// Reads what is on air from a vMix machine (see VMixLink). Off unless set up.
+    var vmix = VMixSettings()
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras, networkControl, language }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras, networkControl, language, vmix }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -194,6 +196,7 @@ struct CueConfig: Codable, Equatable {
         trackTuning = try c.decodeIfPresent(TrackTuning.self, forKey: .trackTuning) ?? TrackTuning()
         virtualCameras = try c.decodeIfPresent([VirtualCamera].self, forKey: .virtualCameras) ?? []
         networkControl = try c.decodeIfPresent(Bool.self, forKey: .networkControl) ?? false
+        vmix = try c.decodeIfPresent(VMixSettings.self, forKey: .vmix) ?? VMixSettings()
         // An unknown word is left out, like not choosing.
         language = (try? c.decodeIfPresent(String.self, forKey: .language)).flatMap { $0 }.flatMap { Language(rawValue: $0) }?.rawValue
     }
