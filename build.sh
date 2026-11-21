@@ -13,6 +13,23 @@ cp "$BIN" "$APP/Contents/MacOS/CueVideo"
 cp "$(dirname "$BIN")/cuevideo-mcp" "$APP/Contents/MacOS/cuevideo-mcp"
 cp Resources/Figtree-VariableFont_wght.ttf "$APP/Contents/Resources/"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+# Launch agent for "Start with this Mac": launchd restarts the app after a crash but not after a normal quit.
+# Nothing uses it until the operator switches it on in Setup (see LaunchAtLogin.swift).
+mkdir -p "$APP/Contents/Library/LaunchAgents"
+cat > "$APP/Contents/Library/LaunchAgents/com.churchfront.cuevideo.agent.plist" <<AGENT
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.churchfront.cuevideo.agent</string>
+  <key>BundleProgram</key><string>Contents/MacOS/CueVideo</string>
+  <key>AssociatedBundleIdentifiers</key><array><string>com.churchfront.cuevideo</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+AGENT
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

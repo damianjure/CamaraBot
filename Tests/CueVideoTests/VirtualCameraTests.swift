@@ -995,3 +995,20 @@ final class NetworkControlTests: XCTestCase {
         XCTAssertEqual(unknown, 404)
     }
 }
+
+final class LaunchAtLoginTests: XCTestCase {
+    func testStatusMapsToWhatTheSwitchShows() {
+        XCTAssertEqual(LaunchAtLogin.state(.enabled), .on)
+        XCTAssertEqual(LaunchAtLogin.state(.notRegistered), .off)
+        XCTAssertEqual(LaunchAtLogin.state(.requiresApproval), .needsApproval)
+        XCTAssertEqual(LaunchAtLogin.state(.notFound), .unavailable)
+    }
+
+    /// The agent file `build.sh` writes: valid, restarts only after a crash, and starts the app's own executable.
+    func testTheBuildScriptWritesACrashOnlyLaunchAgent() throws {
+        let script = try String(contentsOfFile: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("build.sh").path, encoding: .utf8)
+        XCTAssertTrue(script.contains(LaunchAtLogin.plistName))
+        XCTAssertTrue(script.contains("<key>SuccessfulExit</key><false/>"))
+        XCTAssertTrue(script.contains("<key>BundleProgram</key><string>Contents/MacOS/CueVideo</string>"))
+    }
+}

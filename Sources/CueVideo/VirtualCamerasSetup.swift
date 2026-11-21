@@ -32,6 +32,7 @@ struct VirtualCamerasSetup: View {
                 .font(.sans(12)).foregroundStyle(T.inkSubtle)
             if !store.config.virtualCameras.isEmpty {
                 NetworkControlCard().frame(maxWidth: 760, alignment: .leading)
+                LaunchAtLoginCard().frame(maxWidth: 760, alignment: .leading)
             }
         }
         .onAppear { devices = CaptureFeed.devices() }
@@ -411,5 +412,45 @@ private struct NetworkControlCard: View {
                 }
             }
         }
+    }
+}
+
+/// Start with the Mac, and come back after a crash: for the Mac that runs the cameras unattended.
+private struct LaunchAtLoginCard: View {
+    @State private var state = LaunchAtLogin.current
+    @State private var error: String?
+
+    var body: some View {
+        Card(title: "Start with this Mac") {
+            VStack(alignment: .leading, spacing: T.s3) {
+                HStack(spacing: T.s3) {
+                    Toggle("", isOn: Binding(get: { state == .on || state == .needsApproval }, set: { change($0) }))
+                        .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                        .disabled(state == .unavailable)
+                    Text(label).font(.sans(13)).foregroundStyle(state == .off || state == .unavailable ? T.inkSubtle : T.ink)
+                }
+                if state == .needsApproval {
+                    Button("Open Login Items") { LaunchAtLogin.openLoginItems() }.buttonStyle(CueButton())
+                }
+                if let error { Text(error).font(.sans(12)).foregroundStyle(T.danger) }
+                Text("Opens the app when you log in, and again if it crashes. Quitting it yourself keeps it quit. Set the Mac to log in by itself (Users & Groups) for a start with no one there.")
+                    .font(.sans(12)).foregroundStyle(T.inkSubtle)
+            }
+        }
+        .onAppear { state = LaunchAtLogin.current }
+    }
+
+    private var label: String {
+        switch state {
+        case .on: return "On: starts at login and after a crash"
+        case .off: return "Off"
+        case .needsApproval: return "Allow Churchfront Video in System Settings > Login Items to finish"
+        case .unavailable: return "Only in the built app (Churchfront Video.app)"
+        }
+    }
+
+    private func change(_ on: Bool) {
+        do { try LaunchAtLogin.set(on); error = nil } catch { self.error = "Couldn't change it: \(error.localizedDescription)" }
+        state = LaunchAtLogin.current
     }
 }

@@ -129,6 +129,41 @@ Or add them to the setup file (or with Claude's `update_config`; `list_capture_d
 
 Only `ndiName` and an input are needed: `device` (a USB capture device) or `ndiSource` (an NDI source such as `"PC (vMix - Camera)"`, taken at full size over the network; a source that is this camera's own output is refused).  It follows the person nearest the middle when it starts. Claude can steer it with `virtual_follow`, `virtual_shot` (a saved crop, `wide` or `hold`), `save_virtual_shot` and `list_virtual_cameras`. In vMix add an NDI input; for Zoom use NDI Tools' NDI Virtual Input. The first run asks for camera access. Only external devices (capture boxes, USB webcams) are offered: the Mac's own camera can't be sent out as an NDI source.
 
+### Operating a virtual camera
+
+On **Operate**, each running camera has a tile with the whole picture and the crop drawn on it. Click a person in the picture to follow them (the followed one is outlined green); drag on the picture to frame it by hand, which holds the crop where you put it; **Zoom +** and **Zoom −** change the size of the crop; **Save shot** keeps the crop as it is (named Shot 1, Shot 2…, renamed or removed under Setup > Virtual cameras > Saved shots), and its button goes back to it. Right-click a saved shot's button to remove it.
+
+### Video file input
+
+Setting a camera's Input to **Video file** plays a recorded clip in a loop as its picture, at the clip's own speed. It is for tuning tracking and trying the setup without the camera: record a rehearsal once, then change framing rules and watch the same clip. In the setup file it is `"videoFile": "/path/to/clip.mov"`.
+
+### Speed
+
+Status > Virtual cameras shows how many milliseconds a frame takes to crop and send, and how long finding people takes. Those are the numbers to watch when adding cameras or moving to 4K: a frame has 20 ms at 50 fps, and the crop and send should stay well under that.
+
+### Colour format
+
+NDI output is BGRA by default. **Colour format** UYVY (`"sendUYVY": true`) sends half the data, converted with Rec. 709, which is what most receivers work in anyway. A test sends a known colour through a real NDI loopback to check it comes back the same. Audio is not sent: the picture and the room's sound already travel separately in a church booth, and carrying audio would need a clock to keep the two in step.
+
+### Network control (vMix, Stream Deck)
+
+Off by default. Switch it on in Setup > Virtual cameras > Network control (`"networkControl": true`) and other computers can steer the cameras with plain web requests, on port 9912:
+
+```
+http://<this Mac>.local:9912/cameras
+http://<this Mac>.local:9912/camera/Pulpit/follow?key=<key>
+http://<this Mac>.local:9912/camera/Pulpit/follow/full?key=<key>     shoulders, waist or full
+http://<this Mac>.local:9912/camera/Pulpit/wide?key=<key>            also hold
+http://<this Mac>.local:9912/camera/Pulpit/shot/Lectern?key=<key>
+http://<this Mac>.local:9912/camera/Pulpit/zoom/in?key=<key>         or out
+```
+
+The key (Copy key in Setup, New key to replace it) goes in the address or in an `x-cuevideo-key` header. It has its own key, apart from the one Claude's link uses, and it can only steer: it can't change the setup or reach any other tool. It is not encrypted, so use it on a closed network such as a switch only the streaming computers are on.
+
+### Start with the Mac
+
+Setup > Virtual cameras > Start with this Mac registers a launch agent that opens the app at login and opens it again if it crashes (launchd restarts it only after a crash; quitting it yourself keeps it quit). It needs the built app (`./build.sh`) and may ask you to allow it in System Settings > Login Items. For a Mac with no one at it, also set the Mac to log in by itself.
+
 ## Stage scan
 
 **Engineer → Stage scan** (⇧⌘S), for before a service with everyone in place (rehearsal or soundcheck):
