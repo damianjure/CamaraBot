@@ -79,7 +79,7 @@ struct SetupTab: View {
     private var page: SetupPage { SetupPage(rawValue: pageRaw) ?? .switcher }
 
     var body: some View {
-        Page {
+        Page(wide: page == .virtual) {
             PageHeader(title: "Setup", purpose: page.purpose, help: page.help)
             HStack(alignment: .center, spacing: T.s4) {
                 Segments(items: SetupPage.allCases.map { ($0.title, $0.rawValue) }, selection: $pageRaw)

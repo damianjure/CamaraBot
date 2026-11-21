@@ -13,8 +13,8 @@ struct VirtualCamerasSetup: View {
         // needs scrolling past the camera. Narrower: one column, as before.
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: T.s4) {
-                cameras.frame(minWidth: 700, maxWidth: 760, alignment: .leading)
-                if !store.config.virtualCameras.isEmpty { appCards.frame(width: 440, alignment: .leading) }
+                cameras.frame(minWidth: 640, idealWidth: 700, maxWidth: 760, alignment: .leading)
+                if !store.config.virtualCameras.isEmpty { appCards.frame(minWidth: 380, idealWidth: 440, maxWidth: 440, alignment: .leading) }
             }
             VStack(alignment: .leading, spacing: T.s4) {
                 cameras.frame(maxWidth: 760, alignment: .leading)
