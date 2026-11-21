@@ -684,3 +684,49 @@ final class StartModeTests: XCTestCase {
         XCTAssertEqual(r.currentMode, .wide)
     }
 }
+
+final class NDIGroupTests: XCTestCase {
+    func testGroupNamesAreCleaned() {
+        XCTAssertEqual(VirtualCamera.cleanGroups(" Stage , Booth ,, "), "Stage,Booth")
+        XCTAssertEqual(VirtualCamera.cleanGroups("Stage"), "Stage")
+        XCTAssertNil(VirtualCamera.cleanGroups("  , "))
+        XCTAssertNil(VirtualCamera.cleanGroups(""))
+        XCTAssertNil(VirtualCamera.cleanGroups(nil))
+    }
+
+    func testTheGroupIsKeptAndTidiedFromTheSetupFile() throws {
+        var cam = VirtualCamera(device: "d", ndiName: "n")
+        cam.ndiGroups = "Stage"
+        XCTAssertEqual(try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam)).ndiGroups, "Stage")
+        let loose = try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"d","ndiName":"n","ndiGroups":" A , B "}"#.utf8))
+        XCTAssertEqual(loose.ndiGroups, "A,B")
+        XCTAssertNil(try JSONDecoder().decode(VirtualCamera.self, from: Data(#"{"device":"d","ndiName":"n"}"#.utf8)).ndiGroups)
+    }
+
+    func testChangingTheGroupReopensTheOutput() {
+        var a = VirtualCamera(device: "d", ndiName: "n"), b = a
+        b.ndiGroups = "Stage"
+        XCTAssertNotEqual(a.pipeline, b.pipeline)
+        a.ndiGroups = "Stage"
+        XCTAssertEqual(a.pipeline, b.pipeline)
+    }
+
+    /// With the real NDI runtime: a source in a group isn't in the public list, an ordinary one is.
+    func testASourceInAGroupIsNotInThePublicList() throws {
+        guard ndi_load() != nil else { throw XCTSkip("The NDI runtime isn't installed.") }
+        let tag = Int.random(in: 1000...9999)
+        let open = "CueVideoPublic\(tag)", hidden = "CueVideoHidden\(tag)"
+        guard let a = ndi_send_open(open), let b = ndi_send_open_groups(hidden, "CueVideoPrivateGroup") else { throw XCTSkip("NDI sender couldn't open.") }
+        defer { ndi_send_close(a); ndi_send_close(b) }
+        func names() -> [String] {
+            var buf = [CChar](repeating: 0, count: 256 * 64)
+            let n = Int(ndi_sources(&buf, 64, 500))
+            return (0..<n).map { i in buf.withUnsafeBufferPointer { String(cString: $0.baseAddress! + i * 256) } }
+        }
+        // The ordinary source is the control: until it shows up, discovery hasn't settled, so say nothing.
+        var seen = false
+        for _ in 0..<20 where !seen { seen = names().contains { $0.contains(open) } }
+        guard seen else { throw XCTSkip("NDI discovery didn't show the control source in time.") }
+        XCTAssertFalse(names().contains { $0.contains(hidden) })
+    }
+}

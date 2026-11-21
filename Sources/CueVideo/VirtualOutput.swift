@@ -11,6 +11,8 @@ import NDIBridge
 final class VirtualOutput: @unchecked Sendable {
     let name: String
     let size: OutputSize
+    /// The NDI groups the source is announced in (see VirtualCamera.ndiGroups), or nil for the public one.
+    let groups: String?
 
     private let queue = DispatchQueue(label: "cuevideo.virtual.output", qos: .userInteractive)
     private let lock = NSLock()
@@ -24,9 +26,10 @@ final class VirtualOutput: @unchecked Sendable {
     /// Once closed it never sends again: a frame still in flight must not reopen the NDI source.
     private var closed = false
 
-    init(name: String, size: OutputSize) {
+    init(name: String, size: OutputSize, groups: String? = nil) {
         self.name = name
         self.size = size
+        self.groups = groups
     }
 
     struct Stats {
@@ -71,7 +74,7 @@ final class VirtualOutput: @unchecked Sendable {
         // The NDI runtime may be missing: try again now and then, not on every frame.
         guard Date().timeIntervalSince(triedAt) > 5 else { return nil }
         triedAt = Date()
-        let s = name.withCString { ndi_send_open($0) }
+        let s = name.withCString { n in (groups ?? "").withCString { ndi_send_open_groups(n, $0) } }
         lock.lock(); runtimeMissing = s == nil; lock.unlock()
         sender = s
         return s

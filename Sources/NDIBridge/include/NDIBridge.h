@@ -30,6 +30,9 @@ void ndi_recv_release(void *recv, void *frame);
 void ndi_recv_close(void *recv);
 
 void *ndi_send_open(const char *name);
+/// As ndi_send_open, in these NDI groups (comma separated). Only receivers looking in a group
+/// can see the source; NULL or empty is the public group everyone looks in.
+void *ndi_send_open_groups(const char *name, const char *groups);
 void ndi_send_frame(void *send, const uint8_t *bgra, int width, int height, int stride, int fps_n, int fps_d);
 void ndi_send_close(void *send);
 #endif

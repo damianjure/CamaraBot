@@ -55,6 +55,10 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     var output: OutputSize = .p1080
     /// The NDI source name: other computers see "<this Mac> (<ndiName>)".
     var ndiName: String
+    /// NDI groups (comma separated) to announce the source in. Receivers only see a source in a
+    /// group they look in, so this keeps it out of the public list. Nil is the public group.
+    /// A group is a filter for who sees the source, not a password or encryption.
+    var ndiGroups: String?
     /// The tightest zoom. Nil works it out from the input and output sizes.
     var maxZoom: Double?
     /// The shot the follow mode frames: "shoulders", "waist" or "full".
@@ -75,7 +79,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, maxZoom, shotSize, shots, atemInput, startMode, startShot }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, ndiGroups, maxZoom, shotSize, shots, atemInput, startMode, startShot }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -88,6 +92,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080
         ndiName = try c.decodeIfPresent(String.self, forKey: .ndiName) ?? name
+        ndiGroups = Self.cleanGroups(try c.decodeIfPresent(String.self, forKey: .ndiGroups))
         maxZoom = try c.decodeIfPresent(Double.self, forKey: .maxZoom)
         shotSize = try c.decodeIfPresent(String.self, forKey: .shotSize) ?? "waist"
         shots = try c.decodeIfPresent([CropShot].self, forKey: .shots) ?? []
@@ -108,6 +113,12 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     }
 
     var shot: ShotSize { ShotSize(rawValue: shotSize) ?? .waist }
+
+    /// Group names as NDI wants them: comma separated, no spaces or empty names around them. Nil when none.
+    static func cleanGroups(_ text: String?) -> String? {
+        let names = (text ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return names.isEmpty ? nil : names.joined(separator: ",")
+    }
 
     /// What the runtime does at the start: follow, hold the whole picture, or open on a saved
     /// shot (following when that shot is gone).
@@ -130,6 +141,6 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
     /// shot never drops a source that may be on air.
     var pipeline: String {
-        [device, inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+        [device, inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
     }
 }

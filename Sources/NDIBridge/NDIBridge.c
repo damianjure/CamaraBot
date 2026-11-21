@@ -147,9 +147,11 @@ void ndi_recv_release(void *recv, void *frame) {
 
 void ndi_recv_close(void *recv) { if (recv && f_recv_destroy) f_recv_destroy(recv); }
 
-void *ndi_send_open(const char *name) {
+void *ndi_send_open(const char *name) { return ndi_send_open_groups(name, NULL); }
+
+void *ndi_send_open_groups(const char *name, const char *groups) {
     if (!ndi_load() || !f_send_create) return NULL;
-    send_create_t sc = { name, NULL, true, false };
+    send_create_t sc = { name, (groups && groups[0]) ? groups : NULL, true, false };
     return f_send_create(&sc);
 }
 

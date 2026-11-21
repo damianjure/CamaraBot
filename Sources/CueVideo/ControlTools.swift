@@ -181,7 +181,7 @@ enum ControlTools {
                 let t = r.status()
                 var o: [String: Any] = ["name": t.name, "ndi": t.ndiName, "input": t.input, "capture_live": t.captureLive, "ndi_live": t.outputLive,
                                         "frames_sent": t.sent, "frames_dropped": t.dropped, "mode": t.mode, "shot": t.shot, "following": t.phase,
-                                        "zoom_limit": t.zoomLimited, "starts_as": r.camera.startMode.rawValue,
+                                        "zoom_limit": t.zoomLimited, "starts_as": r.camera.startMode.rawValue, "ndi_groups": r.camera.ndiGroups ?? "public",
                                         "crop": ["x": t.crop.x, "y": t.crop.y, "w": t.crop.w, "h": t.crop.h]]
                 if let z = t.maxZoom { o["max_zoom"] = z }
                 if let p = t.problem { o["problem"] = p }

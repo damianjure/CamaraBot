@@ -54,9 +54,10 @@ struct VirtualCameraCard: View {
     @EnvironmentObject var store: ConfigStore
     @State private var nameDraft = ""
     @State private var ndiDraft = ""
+    @State private var groupDraft = ""
     @State private var zoomDraft = VirtualCamera.manualZoomDefault
     @FocusState private var focus: Field?
-    private enum Field { case name, ndi }
+    private enum Field { case name, ndi, group }
 
     /// Changes this camera in the setup. Whether the running camera is reopened is decided by
     /// VirtualCameras.apply from `VirtualCamera.pipeline`: only the device, input size, output size,
@@ -159,6 +160,12 @@ struct VirtualCameraCard: View {
                 note("720p leaves more room to zoom from the same input.")
             }
 
+            labeled("NDI group") {
+                TextField("Public", text: $groupDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .group)
+                    .onSubmit { commitGroup() }
+                note("Empty: anyone on the network sees it. Set one or more groups (comma separated) so only receivers looking in them do. It filters, it doesn't lock.")
+            }
+
             labeled("NDI name") {
                 TextField("NDI name", text: $ndiDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .ndi)
                     .onSubmit { commitNDI() }
@@ -205,16 +212,18 @@ struct VirtualCameraCard: View {
             if cam.enabled { LiveStatus(id: cam.id, ndiName: cam.ndiName) } else { note("Switched off.") }
         }
         .onAppear {
-            nameDraft = cam.name; ndiDraft = cam.ndiName; zoomDraft = cam.maxZoom ?? VirtualCamera.manualZoomDefault
+            nameDraft = cam.name; ndiDraft = cam.ndiName; groupDraft = cam.ndiGroups ?? ""; zoomDraft = cam.maxZoom ?? VirtualCamera.manualZoomDefault
             // A camera saved before names were kept learns its device's name while the device is here.
             if cam.deviceName == nil, let d = device { edit { $0.deviceName = d.name } }
         }
         .onChange(of: cam.name) { _, v in if focus != .name { nameDraft = v } }
         .onChange(of: cam.ndiName) { _, v in if focus != .ndi { ndiDraft = v } }
+        .onChange(of: cam.ndiGroups) { _, v in if focus != .group { groupDraft = v ?? "" } }
         .onChange(of: focus) { old, _ in
             // Leaving a field saves it, so a typed name is never lost.
             if old == .name { commitName() }
             if old == .ndi { commitNDI() }
+            if old == .group { commitGroup() }
         }
     }
 
@@ -233,6 +242,13 @@ struct VirtualCameraCard: View {
     }
 
     /// The NDI name reopens the output, so it is saved on Return or when leaving the field, not on each key.
+    /// Reopens the NDI output (the group is part of how the source is announced), so it is saved on Return or when leaving the field.
+    private func commitGroup() {
+        let g = VirtualCamera.cleanGroups(groupDraft)
+        groupDraft = g ?? ""
+        if g != cam.ndiGroups { edit { $0.ndiGroups = g } }
+    }
+
     private func commitNDI() {
         let n = ndiDraft.trimmingCharacters(in: .whitespaces)
         if n.isEmpty { ndiDraft = cam.ndiName } else if n != cam.ndiName { edit { $0.ndiName = n } }
