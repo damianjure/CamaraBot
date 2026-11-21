@@ -9,6 +9,23 @@ struct VirtualCamerasSetup: View {
     @State private var devices: [CaptureDeviceInfo] = []
 
     var body: some View {
+        // Wide enough: the cameras on the left and the app-wide cards on the right, so nothing
+        // needs scrolling past the camera. Narrower: one column, as before.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: T.s4) {
+                cameras.frame(minWidth: 700, maxWidth: 760, alignment: .leading)
+                if !store.config.virtualCameras.isEmpty { appCards.frame(width: 440, alignment: .leading) }
+            }
+            VStack(alignment: .leading, spacing: T.s4) {
+                cameras.frame(maxWidth: 760, alignment: .leading)
+                if !store.config.virtualCameras.isEmpty { appCards.frame(maxWidth: 760, alignment: .leading) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { devices = CaptureFeed.devices() }
+    }
+
+    private var cameras: some View {
         VStack(alignment: .leading, spacing: T.s4) {
             if store.config.virtualCameras.isEmpty {
                 Card {
@@ -30,13 +47,15 @@ struct VirtualCamerasSetup: View {
             }
             Text(tr("Only external capture devices are offered: this Mac's own camera can't be sent out as an NDI source.", es: "Solo se ofrecen capturadoras externas: la cámara propia de esta Mac no puede salir como fuente NDI."))
                 .font(.sans(12)).foregroundStyle(T.inkSubtle)
-            if !store.config.virtualCameras.isEmpty {
-                NetworkControlCard().frame(maxWidth: 760, alignment: .leading)
-                VMixCard().frame(maxWidth: 760, alignment: .leading)
-                LaunchAtLoginCard().frame(maxWidth: 760, alignment: .leading)
-            }
         }
-        .onAppear { devices = CaptureFeed.devices() }
+    }
+
+    private var appCards: some View {
+        VStack(alignment: .leading, spacing: T.s4) {
+            NetworkControlCard()
+            VMixCard()
+            LaunchAtLoginCard()
+        }
     }
 
     /// With a capture device plugged in it starts on that; with none it starts on an NDI source to choose.
