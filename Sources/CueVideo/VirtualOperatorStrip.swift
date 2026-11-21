@@ -58,14 +58,14 @@ struct VirtualOperatorTile: View {
                     button("Zoom +", active: false) { runtime?.zoomManually(by: 0.85) }
                     button("Zoom −", active: false) { runtime?.zoomManually(by: 1 / 0.85) }
                     button("Save shot", active: false) { saveShot(runtime) }
-                        .help("Saves the crop as it is now, to go back to with one click")
-                    Text("Drag on the picture to frame it by hand").font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1)
+                        .help(tr("Saves the crop as it is now, to go back to with one click", es: "Guarda el recorte como está ahora, para volver con un clic"))
+                    Text(tr("Drag on the picture to frame it by hand", es: "Arrastrá sobre la imagen para encuadrar a mano")).font(.sans(11)).foregroundStyle(T.inkSubtle).lineLimit(1)
                 }
                 if !cam.shots.isEmpty {
                     HStack(spacing: T.s2) {
                         ForEach(cam.shots) { shot in
                             button(shot.name, active: false) { runtime?.go(to: shot) }
-                                .contextMenu { Button("Remove \(shot.name)", role: .destructive) { removeShot(shot) } }
+                                .contextMenu { Button(tr("Remove \(shot.name)", es: "Quitar \(shot.name)"), role: .destructive) { removeShot(shot) } }
                         }
                     }
                 }
@@ -113,7 +113,7 @@ struct VirtualOperatorTile: View {
                             runtime?.frameManually(centerX: p.x, centerY: p.y)
                         }
                     })
-                    .help("Click a person to follow them. Drag to frame by hand.")
+                    .help(tr("Click a person to follow them. Drag to frame by hand.", es: "Clic en una persona para seguirla. Arrastrá para encuadrar a mano."))
                 }
             } else {
                 Text(runtime == nil ? "Starting…" : "Waiting for the picture").font(.sans(11)).foregroundStyle(T.inkSubtle)

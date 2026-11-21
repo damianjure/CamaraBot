@@ -26,9 +26,9 @@ struct VirtualCamerasSetup: View {
                     .buttonStyle(CueButton(kind: .primary))
                 Button { devices = CaptureFeed.devices() } label: { Label("Refresh devices", systemImage: "arrow.clockwise") }
                     .buttonStyle(CueButton())
-                Text("\(devices.count) capture device\(devices.count == 1 ? "" : "s") found").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                Text(tr("\(devices.count) capture device\(devices.count == 1 ? "" : "s") found", es: "\(devices.count) capturadora\(devices.count == 1 ? "" : "s") encontrada\(devices.count == 1 ? "" : "s")")).font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
-            Text("Only external capture devices are offered: this Mac's own camera can't be sent out as an NDI source.")
+            Text(tr("Only external capture devices are offered: this Mac's own camera can't be sent out as an NDI source.", es: "Solo se ofrecen capturadoras externas: la cámara propia de esta Mac no puede salir como fuente NDI."))
                 .font(.sans(12)).foregroundStyle(T.inkSubtle)
             if !store.config.virtualCameras.isEmpty {
                 NetworkControlCard().frame(maxWidth: 760, alignment: .leading)
@@ -104,12 +104,12 @@ struct VirtualCameraCard: View {
             HStack(spacing: T.s3) {
                 Toggle("", isOn: Binding(get: { cam.enabled }, set: { v in edit { $0.enabled = v } }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    .help(cam.enabled ? "On: capturing and sending over NDI" : "Off: nothing is captured or sent")
+                    .help(cam.enabled ? tr("On: capturing and sending over NDI", es: "Encendida: captura y envía por NDI") : tr("Off: nothing is captured or sent", es: "Apagada: no se captura ni se envía nada"))
                 TextField("Name", text: $nameDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .name)
                     .onSubmit { commitName() }
                 Text(cam.enabled ? "On" : "Off").font(.sans(12, .semibold)).foregroundStyle(cam.enabled ? T.success : T.inkSubtle)
                 Spacer(minLength: 0)
-                IconButton(icon: "trash", help: "Remove \(cam.name)") { store.update { $0.virtualCameras.removeAll { $0.id == cam.id } } }
+                IconButton(icon: "trash", help: tr("Remove \(cam.name)", es: "Quitar \(cam.name)")) { store.update { $0.virtualCameras.removeAll { $0.id == cam.id } } }
             }
 
             // Where the picture comes from: a USB capture device, or an NDI source on the network
@@ -130,13 +130,13 @@ struct VirtualCameraCard: View {
                     Button(cam.videoFile.flatMap { $0.isEmpty ? nil : ($0 as NSString).lastPathComponent } ?? "Choose a file…") { chooseFile() }
                         .buttonStyle(CueButton(kind: .secondary))
                 }
-                labeled("") { note("A recorded clip plays in a loop as this camera's picture, to tune tracking without the camera.") }
+                labeled("") { note(tr("A recorded clip plays in a loop as this camera's picture, to tune tracking without the camera.", es: "Un clip grabado se repite como imagen de esta cámara, para afinar el seguimiento sin la cámara.")) }
             } else if cam.ndiSource == nil {
                 labeled("Capture device") {
                     MenuField(text: device?.name ?? "Not found", width: 260) {
                         ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.deviceName = d.name; $0.inputFormat = nil } } }
                     }
-                    if device == nil { note("Plug it in, then Refresh devices.") }
+                    if device == nil { note(tr("Plug it in, then Refresh devices.", es: "Conectala y después tocá Refresh devices.")) }
                 }
 
                 labeled("Input quality") {
@@ -144,7 +144,7 @@ struct VirtualCameraCard: View {
                         get: { cam.inputFormat == nil },
                         set: { auto in edit { $0.inputFormat = auto ? nil : (sizes.first ?? "1920x1080") } }))
                         .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    note(cam.inputFormat == nil ? "Automatic: the largest picture the device gives." : "Chosen by hand:")
+                    note(cam.inputFormat == nil ? tr("Automatic: the largest picture the device gives.", es: "Automático: la imagen más grande que da el dispositivo.") : tr("Chosen by hand:", es: "Elegida a mano:"))
                     if cam.inputFormat != nil {
                         MenuField(text: cam.inputFormat ?? "", width: 140) {
                             ForEach(sizes, id: \.self) { s in Button(label(for: s)) { edit { $0.inputFormat = s } } }
@@ -152,7 +152,7 @@ struct VirtualCameraCard: View {
                     }
                 }
                 if !sizes.isEmpty, sizes.allSatisfy({ CaptureFeed.height(of: $0) < 2160 }) {
-                    labeled("") { note("This device gives no 4K over USB, only up to \(sizes.first ?? "1080p"). Zoom range will be small.") }
+                    labeled("") { note(tr("This device gives no 4K over USB, only up to \(sizes.first ?? "1080p"). Zoom range will be small.", es: "Este dispositivo no da 4K por USB, solo hasta \(sizes.first ?? "1080p"). El rango de zoom será chico.")) }
                 }
             } else {
                 labeled("NDI source") {
@@ -163,8 +163,10 @@ struct VirtualCameraCard: View {
                 }
                 labeled("") {
                     note(cam.inputIsOwnOutput
-                         ? "This is this camera's own output. Pick the one your switcher or vMix sends."
-                         : "The full picture is taken over the network, so a wired connection works best. The zoom range follows what the sender gives.")
+                         ? tr("This is this camera's own output. Pick the one your switcher or vMix sends.",
+                              es: "Esta es la salida de esta misma cámara. Elegí la que manda tu switcher o vMix.")
+                         : tr("The full picture is taken over the network, so a wired connection works best. The zoom range follows what the sender gives.",
+                              es: "La imagen completa llega por la red, así que conviene el cable. El rango de zoom depende de lo que mande el emisor."))
                         .foregroundStyle(cam.inputIsOwnOutput ? T.warning : T.inkSubtle)
                 }
             }
@@ -172,30 +174,30 @@ struct VirtualCameraCard: View {
             labeled("Output size") {
                 Segments(items: [("1080p", OutputSize.p1080), ("720p", OutputSize.p720)],
                          selection: Binding(get: { cam.output }, set: { v in edit { $0.output = v } }))
-                note("720p leaves more room to zoom from the same input.")
+                note(tr("720p leaves more room to zoom from the same input.", es: "720p deja más margen de zoom con la misma entrada."))
             }
 
             labeled("NDI group") {
                 TextField("Public", text: $groupDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .group)
                     .onSubmit { commitGroup() }
-                note("Empty: anyone on the network sees it. Set one or more groups (comma separated) so only receivers looking in them do. It filters, it doesn't lock.")
+                note(tr("Empty: anyone on the network sees it. Set one or more groups (comma separated) so only receivers looking in them do. It filters, it doesn't lock.", es: "Vacío: lo ve cualquiera en la red. Poné uno o más grupos (separados por comas) para que solo lo vean los receptores que miran esos grupos. Filtra, no bloquea."))
             }
 
             labeled("Colour format") {
                 Segments(items: [("BGRA", false), ("UYVY", true)],
                          selection: Binding(get: { cam.sendUYVY }, set: { v in edit { $0.sendUYVY = v } }))
-                note("UYVY sends half the data and is what most NDI receivers work in. Leave BGRA unless the network is the limit.")
+                note(tr("UYVY sends half the data and is what most NDI receivers work in. Leave BGRA unless the network is the limit.", es: "UYVY envía la mitad de los datos y es lo que usan la mayoría de los receptores NDI. Dejá BGRA salvo que la red sea el límite."))
             }
 
             labeled("NDI name") {
                 TextField("NDI name", text: $ndiDraft).textFieldStyle(CueFieldStyle()).frame(width: 220).focused($focus, equals: .ndi)
                     .onSubmit { commitNDI() }
-                note("Seen in vMix and Zoom as \"\(Host.current().localizedName ?? "This Mac") (\(cam.ndiName))\".")
+                note(tr("Seen in vMix and Zoom as \"\(Host.current().localizedName ?? "This Mac") (\(cam.ndiName))\".", es: "Se ve en vMix y Zoom como \"\(Host.current().localizedName ?? "esta Mac") (\(cam.ndiName))\"."))
             }
 
             labeled("Saved shots") {
                 if cam.shots.isEmpty {
-                    note("None yet. On Operate, frame the picture and press Save shot.")
+                    note(tr("None yet. On Operate, frame the picture and press Save shot.", es: "Todavía no hay. En Operate, encuadrá la imagen y tocá Save shot."))
                 } else {
                     VStack(alignment: .leading, spacing: T.s2) {
                         ForEach(cam.shots) { shot in
@@ -203,7 +205,7 @@ struct VirtualCameraCard: View {
                                 ShotNameField(name: shot.name) { n in edit { c in
                                     if let i = c.shots.firstIndex(where: { $0.id == shot.id }) { c.shots[i].name = n }
                                 } }
-                                IconButton(icon: "trash", help: "Remove \(shot.name)") { edit { $0.shots.removeAll { $0.id == shot.id } } }
+                                IconButton(icon: "trash", help: tr("Remove \(shot.name)", es: "Quitar \(shot.name)")) { edit { $0.shots.removeAll { $0.id == shot.id } } }
                             }
                         }
                     }
@@ -221,14 +223,14 @@ struct VirtualCameraCard: View {
                         ForEach(cam.shots) { s in Button(s.name) { edit { $0.startShot = s.id } } }
                     }
                 }
-                note(cam.startMode == .wide ? "Opens on the whole picture and stays there: a fixed general shot."
-                                            : "How it starts when the app opens.")
+                note(cam.startMode == .wide ? tr("Opens on the whole picture and stays there: a fixed general shot.", es: "Abre en la imagen completa y se queda ahí: un plano general fijo.")
+                                            : tr("How it starts when the app opens.", es: "Cómo arranca al abrir la app."))
             }
 
             labeled("Follow shot") {
                 Segments(items: ShotSize.allCases.map { ($0.short, $0.rawValue) },
                          selection: Binding(get: { cam.shotSize }, set: { v in edit { $0.shotSize = v } }))
-                note("How tight it frames the person.")
+                note(tr("How tight it frames the person.", es: "Qué tan cerrado encuadra a la persona."))
             }
 
             labeled("Zoom limit") {
@@ -237,7 +239,7 @@ struct VirtualCameraCard: View {
                     set: { auto in edit { $0.maxZoom = auto ? nil : zoomDraft } }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
                 if cam.maxZoom == nil {
-                    note("Automatic: worked out from the input and output sizes.")
+                    note(tr("Automatic: worked out from the input and output sizes.", es: "Automático: se calcula con los tamaños de entrada y de salida."))
                 } else {
                     Slider(value: $zoomDraft, in: VirtualCamera.manualZoomRange, step: 0.25) { editing in
                         if !editing { edit { $0.maxZoom = zoomDraft } }
@@ -247,7 +249,7 @@ struct VirtualCameraCard: View {
             }
 
             Rectangle().fill(T.line).frame(height: 1)
-            if cam.enabled { LiveStatus(id: cam.id, ndiName: cam.ndiName) } else { note("Switched off.") }
+            if cam.enabled { LiveStatus(id: cam.id, ndiName: cam.ndiName) } else { note(tr("Switched off.", es: "Apagada.")) }
         }
         .onAppear {
             nameDraft = cam.name; ndiDraft = cam.ndiName; groupDraft = cam.ndiGroups ?? ""; zoomDraft = cam.maxZoom ?? VirtualCamera.manualZoomDefault
@@ -311,10 +313,10 @@ private struct LiveStatus: View {
             VStack(alignment: .leading, spacing: T.s2) {
                 if let r = VirtualCameras.shared.runtime(for: id) {
                     let s = r.status()
-                    row("Capture", ok: s.captureLive, text: s.captureLive ? "Receiving \(s.input)" : (s.problem ?? "Waiting for the picture"))
+                    row("Capture", ok: s.captureLive, text: s.captureLive ? tr("Receiving \(s.input)", es: "Recibiendo \(s.input)") : (s.problem ?? tr("Waiting for the picture", es: "Esperando la imagen")))
                     row("NDI output", ok: s.outputLive,
-                        text: s.runtimeMissing ? "NDI isn't installed on this Mac. Install NDI Tools."
-                              : (s.outputLive ? "Sending as \"\(ndiName)\", \(s.sent) frames, \(s.dropped) dropped" : "Not sending"))
+                        text: s.runtimeMissing ? tr("NDI isn't installed on this Mac. Install NDI Tools.", es: "NDI no está instalado en esta Mac. Instalá NDI Tools.")
+                              : (s.outputLive ? tr("Sending as \"\(ndiName)\", \(s.sent) frames, \(s.dropped) dropped", es: "Enviando como \"\(ndiName)\", \(s.sent) cuadros, \(s.dropped) perdidos") : tr("Not sending", es: "Sin enviar")))
                     HStack(spacing: T.s2) {
                         Text("Steering").font(.sans(12, .semibold)).foregroundStyle(T.inkMuted).frame(width: 130, alignment: .leading)
                         steer("Follow", active: s.mode == "follow") { r.followPerson() }
@@ -323,14 +325,14 @@ private struct LiveStatus: View {
                         Text(s.mode == "follow" || s.mode == "shot" ? s.steeringText : "").font(.sans(12)).foregroundStyle(T.inkSubtle)
                     }
                     if s.zoomLimited {
-                        Text("Zoom limit reached: the picture can't get any tighter for this shot at this input size.")
+                        Text(tr("Zoom limit reached: the picture can't get any tighter for this shot at this input size.", es: "Se llegó al límite de zoom: la imagen no puede cerrarse más para este plano con este tamaño de entrada."))
                             .font(.sans(12, .semibold)).foregroundStyle(T.warning)
                     }
                     if let z = s.maxZoom {
-                        Text(String(format: "Zoom range up to %.2f× of the full picture.", z)).font(.sans(12)).foregroundStyle(T.inkSubtle)
+                        Text(tr(String(format: "Zoom range up to %.2f× of the full picture.", z), es: String(format: "Rango de zoom hasta %.2f× de la imagen completa.", z))).font(.sans(12)).foregroundStyle(T.inkSubtle)
                     }
                 } else {
-                    Text("Starting…").font(.sans(12)).foregroundStyle(T.inkSubtle)
+                    Text(tr("Starting…", es: "Iniciando…")).font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
         }
@@ -385,13 +387,13 @@ private struct NetworkControlCard: View {
                     Toggle("", isOn: Binding(get: { store.config.networkControl },
                                              set: { on in store.update { $0.networkControl = on } }))
                         .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    Text(store.config.networkControl ? "On: other computers can steer the virtual cameras" : "Off")
+                    Text(store.config.networkControl ? tr("On: other computers can steer the virtual cameras", es: "Encendido: otras computadoras pueden mover las cámaras virtuales") : tr("Off", es: "Apagado"))
                         .font(.sans(13)).foregroundStyle(store.config.networkControl ? T.ink : T.inkSubtle)
                 }
                 if store.config.networkControl {
                     Text("http://\(host):\(NetworkControl.defaultPort)/camera/<camera name>/follow?key=<key>")
                         .font(.sans(12)).textSelection(.enabled).foregroundStyle(T.inkMuted)
-                    Text("Also: wide, hold, follow/full, shot/<saved shot>, zoom/in, zoom/out, and /cameras for the list. It only steers; it can't change the setup.")
+                    Text(tr("Also: wide, hold, follow/full, shot/<saved shot>, zoom/in, zoom/out, and /cameras for the list. It only steers; it can't change the setup.", es: "También: wide, hold, follow/full, shot/<toma guardada>, zoom/in, zoom/out, y /cameras para la lista. Solo mueve cámaras; no puede cambiar la configuración."))
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                     HStack(spacing: T.s2) {
                         Button(copied ? "Copied" : "Copy key") {
@@ -402,12 +404,12 @@ private struct NetworkControlCard: View {
                         }.buttonStyle(CueButton())
                         Button("New key") { NetworkControl.shared.renewKey(); copied = false }
                             .buttonStyle(CueButton())
-                            .help("Replaces the key: anything using the old one stops working")
+                            .help(tr("Replaces the key: anything using the old one stops working", es: "Cambia la clave: lo que use la anterior deja de funcionar"))
                     }
-                    Text("Not encrypted: use it on a closed network, like a switch only the streaming computers are on.")
+                    Text(tr("Not encrypted: use it on a closed network, like a switch only the streaming computers are on.", es: "No va cifrado: usalo en una red cerrada, como un switch donde solo estén las computadoras de la transmisión."))
                         .font(.sans(12)).foregroundStyle(T.warning)
                 } else {
-                    Text("Off by default. Switch it on to let vMix, Companion or a Stream Deck send simple web requests that steer a camera.")
+                    Text(tr("Off by default. Switch it on to let vMix, Companion or a Stream Deck send simple web requests that steer a camera.", es: "Apagado por defecto. Encendelo para que vMix, Companion o un Stream Deck muevan una cámara con pedidos web simples."))
                         .font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }
             }
@@ -433,7 +435,7 @@ private struct LaunchAtLoginCard: View {
                     Button("Open Login Items") { LaunchAtLogin.openLoginItems() }.buttonStyle(CueButton())
                 }
                 if let error { Text(error).font(.sans(12)).foregroundStyle(T.danger) }
-                Text("Opens the app when you log in, and again if it crashes. Quitting it yourself keeps it quit. Set the Mac to log in by itself (Users & Groups) for a start with no one there.")
+                Text(tr("Opens the app when you log in, and again if it crashes. Quitting it yourself keeps it quit. Set the Mac to log in by itself (Users & Groups) for a start with no one there.", es: "Abre la app al iniciar sesión, y de nuevo si se cierra por un error. Si la cerrás vos, queda cerrada. Para que arranque sin nadie, poné la Mac en inicio de sesión automático (Usuarios y grupos)."))
                     .font(.sans(12)).foregroundStyle(T.inkSubtle)
             }
         }
@@ -442,15 +444,15 @@ private struct LaunchAtLoginCard: View {
 
     private var label: String {
         switch state {
-        case .on: return "On: starts at login and after a crash"
-        case .off: return "Off"
-        case .needsApproval: return "Allow Churchfront Video in System Settings > Login Items to finish"
-        case .unavailable: return "Only in the built app (Churchfront Video.app)"
+        case .on: return tr("On: starts at login and after a crash", es: "Encendido: arranca al iniciar sesión y tras un error")
+        case .off: return tr("Off", es: "Apagado")
+        case .needsApproval: return tr("Allow Churchfront Video in System Settings > Login Items to finish", es: "Permití Churchfront Video en Ajustes del Sistema > Ítems de inicio para terminar")
+        case .unavailable: return tr("Only in the built app (Churchfront Video.app)", es: "Solo en la app compilada (Churchfront Video.app)")
         }
     }
 
     private func change(_ on: Bool) {
-        do { try LaunchAtLogin.set(on); error = nil } catch { self.error = "Couldn't change it: \(error.localizedDescription)" }
+        do { try LaunchAtLogin.set(on); error = nil } catch { self.error = tr("Couldn't change it: \(error.localizedDescription)", es: "No se pudo cambiar: \(error.localizedDescription)") }
         state = LaunchAtLogin.current
     }
 }

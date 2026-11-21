@@ -12,7 +12,7 @@ struct SwitcherWindow: View {
 
     var body: some View {
         Page {
-            PageHeader(title: "Full switcher", purpose: "Every control on the switcher. What you press here goes to air like the hardware panel.") {
+            PageHeader(title: "Full switcher", purpose: tr("Every control on the switcher. What you press here goes to air like the hardware panel.", es: "Todos los controles del switcher. Lo que apretás acá sale al aire igual que en el panel físico.")) {
                 if !atem.state.product.isEmpty { Text(atem.state.product).font(.sans(12)).foregroundStyle(T.inkMuted) }
                 if atem.state.meCount > 1 {
                     Segments(items: (0..<atem.state.meCount).map { ("M/E \($0 + 1)", $0) }, selection: $me)
@@ -44,26 +44,26 @@ enum SetupPage: String, CaseIterable, Identifiable {
     }
     var purpose: String {
         switch self {
-        case .switcher: return "Where the ATEM is, and which mix the operator runs."
-        case .sources: return "The tiles the operator can put on Next, left to right."
-        case .keys: return "On and off buttons under Fade and Cut, such as lower thirds."
-        case .cameras: return "The PTZ cameras, the switcher input each one feeds, and their saved shots."
-        case .virtual: return "Fixed USB cameras that follow a person by cropping their picture, sent out over NDI."
-        case .tracking: return "How auto tracking follows a person."
-        case .assistant: return "Let Claude set up and run Churchfront Video for you, in plain words."
-        case .file: return "Everything in Setup is saved in one file that people and Claude can edit."
+        case .switcher: return tr("Where the ATEM is, and which mix the operator runs.", es: "Dónde está el ATEM y qué mix maneja el operador.")
+        case .sources: return tr("The tiles the operator can put on Next, left to right.", es: "Los cuadros que el operador puede poner en Next, de izquierda a derecha.")
+        case .keys: return tr("On and off buttons under Fade and Cut, such as lower thirds.", es: "Botones de encendido y apagado debajo de Fade y Cut, como los zócalos.")
+        case .cameras: return tr("The PTZ cameras, the switcher input each one feeds, and their saved shots.", es: "Las cámaras PTZ, la entrada del switcher que alimenta cada una y sus tomas guardadas.")
+        case .virtual: return tr("Fixed USB cameras that follow a person by cropping their picture, sent out over NDI.", es: "Cámaras USB fijas que siguen a una persona recortando su imagen, enviadas por NDI.")
+        case .tracking: return tr("How auto tracking follows a person.", es: "Cómo el seguimiento automático sigue a una persona.")
+        case .assistant: return tr("Let Claude set up and run Churchfront Video for you, in plain words.", es: "Dejá que Claude configure y maneje Churchfront Video por vos, con palabras simples.")
+        case .file: return tr("Everything in Setup is saved in one file that people and Claude can edit.", es: "Todo lo de Setup se guarda en un solo archivo que pueden editar las personas y Claude.")
         }
     }
     var help: String? {
         switch self {
         case .switcher: return nil
-        case .sources: return "Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it."
-        case .keys: return "Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures."
-        case .cameras: return "Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it."
-        case .virtual: return "A fixed camera on a USB capture box can follow a speaker with no motors: Churchfront Video crops its picture and sends the crop out as an NDI source for vMix or Zoom. Cropping is digital zoom, so a 4K input has far more room to zoom than a 1080p one. Many capture boxes take 4K over HDMI but only give 1080p over USB: the format list shows what this Mac really gets."
-        case .tracking: return "Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back."
-        case .assistant: return "Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download."
-        case .file: return "The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it."
+        case .sources: return tr("Keys 1 to 9 and 0 pick the tiles in this order. Leave the name blank to use the camera's name or the switcher's. Until any are added, the row shows every camera. For graphics or lyrics, choose the NDI source showing the same picture (in Churchfront Screens, add an NDI output to that screen) so the tile and the Next and Live monitors show it.", es: "Las teclas 1 a 9 y 0 eligen los cuadros en este orden. Dejá el nombre vacío para usar el de la cámara o el del switcher. Mientras no agregues ninguno, la fila muestra todas las cámaras. Para gráficos o letras, elegí la fuente NDI que muestra la misma imagen (en Churchfront Screens, agregá una salida NDI a esa pantalla) para que el cuadro y los monitores Next y Live la muestren.")
+        case .keys: return tr("Upstream keys cut on and off; DSKs fade at their own rate. Choose an NDI preview with alpha (in Churchfront Screens, send the lower thirds screen to NDI with alpha) to see the key laid over the Next and Live pictures.", es: "Los keys upstream entran y salen de golpe; los DSK hacen fundido a su propio ritmo. Elegí una vista previa NDI con alfa (en Churchfront Screens, mandá la pantalla de zócalos a NDI con alfa) para ver el key sobre las imágenes de Next y Live.")
+        case .cameras: return tr("Canon (HTTP) works with no camera settings, reports where the camera points, and shows the presets saved on the camera. Most other cameras speak VISCA over IP (UDP 52381); PTZOptics also takes VISCA over TCP (5678). Set the switcher input each camera is plugged into, so putting it on Next lets the operator move it.", es: "Canon (HTTP) funciona sin configurar la cámara, informa hacia dónde apunta y muestra los presets guardados en la cámara. La mayoría de las otras cámaras hablan VISCA por IP (UDP 52381); PTZOptics también acepta VISCA por TCP (5678). Indicá la entrada del switcher donde está conectada cada cámara, así al ponerla en Next el operador puede moverla.")
+        case .virtual: return tr("A fixed camera on a USB capture box can follow a speaker with no motors: Churchfront Video crops its picture and sends the crop out as an NDI source for vMix or Zoom. Cropping is digital zoom, so a 4K input has far more room to zoom than a 1080p one. Many capture boxes take 4K over HDMI but only give 1080p over USB: the format list shows what this Mac really gets.", es: "Una cámara fija en una capturadora USB puede seguir a un orador sin motores: Churchfront Video recorta su imagen y manda el recorte como fuente NDI para vMix o Zoom. Recortar es zoom digital, así que una entrada 4K tiene mucho más margen de zoom que una de 1080p. Muchas capturadoras aceptan 4K por HDMI pero solo dan 1080p por USB: la lista de formatos muestra lo que esta Mac recibe de verdad.")
+        case .tracking: return tr("Track (under the joystick) makes a Canon camera follow a person, using its preview picture. It frames them as a shoulders-up, waist-up or full-length follow shot: eyes near the upper third, headroom to suit the shot, lead room on the side they face or walk toward, and gentle eased moves. Zooming by hand keeps tracking and holds the new size. Moving the joystick, a shot or a preset hands the camera back.", es: "Track (debajo del joystick) hace que una cámara Canon siga a una persona usando su imagen de vista previa. La encuadra como un plano de seguimiento de hombros, cintura o cuerpo entero: ojos cerca del tercio superior, aire arriba según el plano, espacio hacia donde mira o camina, y movimientos suaves. Si hacés zoom a mano, sigue el seguimiento y mantiene el nuevo tamaño. Al mover el joystick, una toma o un preset, la cámara vuelve a tu control.")
+        case .assistant: return tr("Connecting adds Churchfront Video to the Claude desktop app on this Mac. Claude can then find your switcher and cameras on the network, set them up with you, and run the switcher when you ask. It checks with you before changing anything live. Claude for Mac is free from claude.ai/download.", es: "Al conectar, Churchfront Video se agrega a la app de escritorio de Claude en esta Mac. Claude puede entonces encontrar tu switcher y tus cámaras en la red, configurarlos con vos y manejar el switcher cuando se lo pidas. Te consulta antes de cambiar algo que esté en vivo. Claude para Mac es gratis en claude.ai/download.")
+        case .file: return tr("The file is plain JSON. You, the system owner or Claude can edit it directly; Churchfront Video picks up changes within a second. A copy of the last setup that loaded cleanly is kept beside it.", es: "El archivo es JSON simple. Vos, el responsable del sistema o Claude pueden editarlo directamente; Churchfront Video toma los cambios en un segundo. Al lado se guarda una copia de la última configuración que cargó bien.")
         }
     }
 }
@@ -81,7 +81,15 @@ struct SetupTab: View {
     var body: some View {
         Page {
             PageHeader(title: "Setup", purpose: page.purpose, help: page.help)
-            Segments(items: SetupPage.allCases.map { ($0.title, $0.rawValue) }, selection: $pageRaw)
+            HStack(alignment: .center, spacing: T.s4) {
+                Segments(items: SetupPage.allCases.map { ($0.title, $0.rawValue) }, selection: $pageRaw)
+                Spacer(minLength: 0)
+                // Only the help texts change; names of programs and controls stay in English.
+                Segments(items: Language.allCases.map { ($0.name, $0) },
+                         selection: Binding(get: { Lang.current }, set: { l in store.update { $0.language = l.rawValue } }))
+                    .help(tr("Language of the help texts. Technical terms and control labels stay in English.",
+                             es: "Idioma de las ayudas. Los términos técnicos y los nombres de los controles quedan en inglés."))
+            }
             switch page {
             case .switcher: switcher
             case .sources: sources
@@ -163,12 +171,12 @@ struct SetupTab: View {
                             if let j = c.sources.firstIndex(where: { $0.input == s.input }) { c.sources[j].ndi = v }
                         } }
                         .frame(width: 280)
-                        .help("An NDI source showing what this input carries, such as a Churchfront Screens screen sent to NDI, for its tile and the Next and Live pictures.")
+                        .help(tr("An NDI source showing what this input carries, such as a Churchfront Screens screen sent to NDI, for its tile and the Next and Live pictures.", es: "Una fuente NDI que muestra lo que lleva esta entrada, como una pantalla de Churchfront Screens enviada a NDI, para su cuadro y las imágenes de Next y Live."))
                     }
                     Spacer(minLength: 0)
-                    IconButton(icon: "chevron.up", help: "Move earlier in the row") { move(s.input, by: -1) }.disabled(i == 0)
-                    IconButton(icon: "chevron.down", help: "Move later in the row") { move(s.input, by: 1) }.disabled(i == chosen.count - 1)
-                    IconButton(icon: "trash", help: "Take this tile out of the row") { store.update { $0.sources.removeAll { $0.input == s.input } } }
+                    IconButton(icon: "chevron.up", help: tr("Move earlier in the row", es: "Mover antes en la fila")) { move(s.input, by: -1) }.disabled(i == 0)
+                    IconButton(icon: "chevron.down", help: tr("Move later in the row", es: "Mover después en la fila")) { move(s.input, by: 1) }.disabled(i == chosen.count - 1)
+                    IconButton(icon: "trash", help: tr("Take this tile out of the row", es: "Sacar este cuadro de la fila")) { store.update { $0.sources.removeAll { $0.input == s.input } } }
                 }
             }
             MenuField(text: "Add a source", width: 180, icon: "plus") {
@@ -207,9 +215,9 @@ struct SetupTab: View {
                         if let i = c.keys.firstIndex(of: k) { c.keys[i].ndi = v }
                     } }
                     .frame(width: 280)
-                    .help("An NDI source with alpha showing this key, such as Churchfront Screens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.")
+                    .help(tr("An NDI source with alpha showing this key, such as Churchfront Screens' lower thirds sent to NDI with alpha. It's laid over the Next and Live pictures when the key is on them.", es: "Una fuente NDI con alfa que muestra este key, como los zócalos de Churchfront Screens enviados a NDI con alfa. Se superpone a las imágenes de Next y Live cuando el key está en ellas."))
                     Spacer(minLength: 0)
-                    IconButton(icon: "trash", help: "Remove this button") { store.update { $0.keys.removeAll { $0 == k } } }
+                    IconButton(icon: "trash", help: tr("Remove this button", es: "Quitar este botón")) { store.update { $0.keys.removeAll { $0 == k } } }
                 }
             }
             MenuField(text: "Add a key button", width: 180, icon: "plus") {
@@ -266,7 +274,7 @@ struct SetupTab: View {
                 .buttonStyle(CueButton())
             }
             Card(title: "Camera admin login",
-                 help: "Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time Churchfront Video uses it after an update.") {
+                 help: tr("Only needed to delete or change presets stored on the cameras themselves. Saved in this Mac's Keychain, not in the setup file. One login for every Canon camera. macOS may ask for this Mac's password the first time Churchfront Video uses it after an update.", es: "Solo hace falta para borrar o cambiar presets guardados en las cámaras. Se guarda en el Llavero de esta Mac, no en el archivo de configuración. Un mismo usuario para todas las cámaras Canon. macOS puede pedir la contraseña de esta Mac la primera vez que Churchfront Video lo usa después de una actualización.")) {
                 CameraLoginRow()
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -365,7 +373,7 @@ struct CameraRow: View {
     var body: some View {
         HStack(spacing: T.s2) {
             Circle().fill(ptz.online.contains(camera.id) ? T.success : T.lineStrong).frame(width: 8, height: 8)
-                .frame(width: 10).help(ptz.online.contains(camera.id) ? "Answering" : "Not answering")
+                .frame(width: 10).help(ptz.online.contains(camera.id) ? tr("Answering", es: "Responde") : tr("Not answering", es: "No responde"))
             TextField("Name", text: $camera.name).textFieldStyle(CueFieldStyle()).frame(width: 120)
             TextField("IP address", text: $camera.host).textFieldStyle(CueFieldStyle()).frame(width: 140)
             MenuField(text: camera.proto.label, width: 170) {
@@ -378,18 +386,18 @@ struct CameraRow: View {
                 Button("No input") { camera.atemInput = nil }
                 ForEach(atem.state.busSources.filter(\.isExternal)) { s in Button(s.long) { camera.atemInput = s.id } }
             }
-            .help("The switcher input this camera is plugged into")
+            .help(tr("The switcher input this camera is plugged into", es: "La entrada del switcher donde está conectada esta cámara"))
             if camera.proto != .canonXC {
                 MenuField(text: "Count from \(camera.firstPreset)", width: 130) {
                     Button("Count from 0") { camera.firstPreset = 0 }
                     Button("Count from 1") { camera.firstPreset = 1 }
                 }
-                .help("Some VISCA cameras number their presets from 1 instead of 0")
+                .help(tr("Some VISCA cameras number their presets from 1 instead of 0", es: "Algunas cámaras VISCA numeran sus presets desde 1 en vez de 0"))
             } else {
                 Text("Read from the camera").font(.sans(11)).foregroundStyle(T.inkSubtle).frame(width: 130, alignment: .leading)
             }
             Spacer(minLength: 0)
-            IconButton(icon: "trash", help: "Remove \(camera.name)", action: remove)
+            IconButton(icon: "trash", help: tr("Remove \(camera.name)", es: "Quitar \(camera.name)"), action: remove)
         }
     }
 }
@@ -422,7 +430,7 @@ struct ShotEditor: View {
                             number("Gain", exposure($s, \.gain)); number("Shutter", exposure($s, \.shutter)); number("Iris", exposure($s, \.iris))
                         }
                         Button("Recall") { ptz.go(to: s, camera: camera.id) }
-                            .help("Sends this to \(camera.name) now. Check it isn't live first.")
+                            .help(tr("Sends this to \(camera.name) now. Check it isn't live first.", es: "Envía esto a \(camera.name) ahora. Verificá antes que no esté en vivo."))
                         Button("Update to now") { ptz.saveShot("", camera: camera.id, kind: s.kind, replacing: s.id) }
                         Button { move(s.id, -1) } label: { Image(systemName: "chevron.up") }.buttonStyle(.borderless)
                         Button { move(s.id, 1) } label: { Image(systemName: "chevron.down") }.buttonStyle(.borderless)
@@ -503,13 +511,13 @@ struct StatusTab: View {
 
     var body: some View {
         Page {
-            PageHeader(title: "Status", purpose: "How Churchfront Video is talking to the switcher and cameras right now.") {
+            PageHeader(title: "Status", purpose: tr("How Churchfront Video is talking to the switcher and cameras right now.", es: "Cómo se está comunicando Churchfront Video con el switcher y las cámaras ahora.")) {
                 Button("Copy report") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(StatusReport.text(booth), forType: .string)
                 }
                 .buttonStyle(CueButton())
-                .help("Copies everything on this page as text, ready to paste to Claude or the system owner")
+                .help(tr("Copies everything on this page as text, ready to paste to Claude or the system owner", es: "Copia todo lo de esta página como texto, listo para pegarlo a Claude o al responsable del sistema"))
             }
             HStack(alignment: .top, spacing: T.s4) {
                 Card(title: "Switcher") { grid(StatusReport.switcherRows(booth)) }
@@ -532,7 +540,7 @@ struct StatusTab: View {
             }
             VirtualStatusSection()
             Card(title: "Commands sent to the switcher",
-                 help: "Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed.") {
+                 help: tr("Newest first. Only commands from this Mac show here; the switcher's own panel and other software aren't listed.", es: "Lo más nuevo primero. Acá solo se muestran comandos de esta Mac; no aparecen los del panel del switcher ni los de otros programas.")) {
                 if atem.sentLog.isEmpty {
                     Text("Nothing sent yet.").font(.sans(12)).foregroundStyle(T.inkSubtle)
                 }

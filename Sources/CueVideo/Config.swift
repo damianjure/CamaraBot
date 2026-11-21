@@ -168,10 +168,12 @@ struct CueConfig: Codable, Equatable {
     /// Lets other computers on the network steer the virtual cameras with simple web requests
     /// (vMix, Stream Deck), with a key. Off unless switched on (see NetworkControl).
     var networkControl = false
+    /// The language of the help texts: "en" or "es". Missing: follows the Mac's language (see Lang).
+    var language: String?
 
     init() {}
 
-    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras, networkControl }
+    private enum Keys: String, CodingKey { case atemHost, me, sources, cameras, keys, trackSpeed, ptzSpeed, trackTilt, trackZoom, mixNames, pictures, screens, routes, framing, trackTuning, virtualCameras, networkControl, language }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -192,13 +194,15 @@ struct CueConfig: Codable, Equatable {
         trackTuning = try c.decodeIfPresent(TrackTuning.self, forKey: .trackTuning) ?? TrackTuning()
         virtualCameras = try c.decodeIfPresent([VirtualCamera].self, forKey: .virtualCameras) ?? []
         networkControl = try c.decodeIfPresent(Bool.self, forKey: .networkControl) ?? false
+        // An unknown word is left out, like not choosing.
+        language = (try? c.decodeIfPresent(String.self, forKey: .language)).flatMap { $0 }.flatMap { Language(rawValue: $0) }?.rawValue
     }
 }
 
 /// Keeps the config file and the running app in step: edits to the file are picked up
 /// within a second, and changes made in the app are written back to the file.
 final class ConfigStore: ObservableObject {
-    @Published private(set) var config = CueConfig()
+    @Published private(set) var config = CueConfig() { didSet { Lang.chosen = config.language.flatMap(Language.init) } }
     /// Why the file couldn't be read, if it couldn't. The app keeps running on the last good setup.
     @Published private(set) var fileError: String?
     @Published private(set) var loadedAt: Date?

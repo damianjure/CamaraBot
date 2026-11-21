@@ -1012,3 +1012,28 @@ final class LaunchAtLoginTests: XCTestCase {
         XCTAssertTrue(script.contains("<key>BundleProgram</key><string>Contents/MacOS/CueVideo</string>"))
     }
 }
+
+final class LanguageTests: XCTestCase {
+    override func tearDown() { Lang.chosen = nil }
+
+    func testTheTextFollowsTheChosenLanguage() {
+        Lang.chosen = .en
+        XCTAssertEqual(tr("Remove Pulpit", es: "Quitar Pulpit"), "Remove Pulpit")
+        Lang.chosen = .es
+        XCTAssertEqual(tr("Remove Pulpit", es: "Quitar Pulpit"), "Quitar Pulpit")
+    }
+
+    func testWithNoChoiceItFollowsTheMac() {
+        XCTAssertEqual(Lang.system(["es-AR", "en-US"]), .es)
+        XCTAssertEqual(Lang.system(["en-US", "es-AR"]), .en)
+        XCTAssertEqual(Lang.system([]), .en)
+    }
+
+    func testTheChoiceIsKeptInTheSetupFileAndAnUnknownOneIsIgnored() throws {
+        var c = CueConfig()
+        c.language = "es"
+        XCTAssertEqual(try JSONDecoder().decode(CueConfig.self, from: JSONEncoder().encode(c)).language, "es")
+        XCTAssertNil(try JSONDecoder().decode(CueConfig.self, from: Data(#"{"language":"klingon"}"#.utf8)).language)
+        XCTAssertNil(try JSONDecoder().decode(CueConfig.self, from: Data("{}".utf8)).language)
+    }
+}

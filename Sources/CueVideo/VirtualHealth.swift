@@ -75,7 +75,7 @@ struct VirtualCameraBanner: View {
                     .font(.sans(13, .semibold)).foregroundStyle(.white).lineLimit(2)
                     .padding(.horizontal, T.s4).padding(.vertical, T.s2)
                     .background(Capsule().fill(T.danger)).padding(.top, T.s3)
-                    .help("A virtual camera isn't sending. Details are in Status.")
+                    .help(tr("A virtual camera isn't sending. Details are in Status.", es: "Una cámara virtual no está enviando. El detalle está en Status."))
             }
         }
     }
