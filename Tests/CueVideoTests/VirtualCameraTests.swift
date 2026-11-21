@@ -579,8 +579,12 @@ final class NDIInputLoopbackTests: XCTestCase {
         let sending = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "loopback.send"))
         sending.schedule(deadline: .now(), repeating: .milliseconds(33))
         sending.setEventHandler { frame.withUnsafeBufferPointer { ndi_send_frame(send, $0.baseAddress, Int32(w), Int32(h), Int32(w * 4), 30, 1) } }
+        // Closing the sender while a frame is still going out crashes inside the NDI runtime (and is
+        // blamed on whatever test happens to be running), so wait for the timer to stop first.
+        let stopped = DispatchSemaphore(value: 0)
+        sending.setCancelHandler { stopped.signal() }
         sending.resume()
-        defer { sending.cancel(); ndi_send_close(send) }
+        defer { sending.cancel(); stopped.wait(); ndi_send_close(send) }
 
         let feed = NDIInputFeed(source: "ANY COMPUTER (\(channel))")
         let got = XCTestExpectation(description: "a frame arrives")
