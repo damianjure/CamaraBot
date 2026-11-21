@@ -42,6 +42,9 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     private var started = false
     private let createdAt = Date()
     private var dropWindow = DropWindow()
+    // Smoothed milliseconds spent on a frame (crop and send) and on a detection, for Status.
+    private var frameMs = 0.0
+    private var detectMs = 0.0
     private var seen: (people: [CGRect], followed: CGRect?, at: Date) = ([], nil, .distantPast)
 
     /// Seconds since this camera was set up: a picture that hasn't come yet is not a fault in the first moments.
@@ -57,7 +60,12 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         outputHeight = camera.output.height
         shot = camera.shot
         framing = Framing(camera.shot.standard.merged(config.framing[camera.shot.rawValue]))
-        if let source = camera.inputSource {
+        if let file = camera.videoFile, !file.isEmpty {
+            let f = VideoFileFeed(path: file)
+            feed = f
+            acquire = { f.start() }
+            relinquish = { f.stop() }
+        } else if let source = camera.inputSource {
             let f = NDIInputHub.shared.feed(source)
             feed = f
             acquire = { NDIInputHub.shared.retain(f) }
@@ -109,7 +117,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     func update(_ cam: VirtualCamera, config: CueConfig) {
         let sizeChanged = cam.shotSize != camera.shotSize
         // A name learned while running (see CaptureFeedHub.feed).
-        if cam.inputSource == nil, cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
+        if cam.inputSource == nil, cam.videoFile == nil, cam.deviceName != camera.deviceName { _ = CaptureFeedHub.shared.feed(cam.device, name: cam.deviceName, preferred: cam.inputFormat) }
         // The capture thread reads the setup too (the start mode), so it changes under the lock.
         lock.lock(); camera = cam; lock.unlock()
         frame(as: sizeChanged ? cam.shot : nil, config: config)
@@ -194,6 +202,9 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         var zoomLimited: Bool
         var maxZoom: Double?
         var crop: CropRect
+        /// Milliseconds to crop and send one frame, and to find the people in one; 0 until measured.
+        var frameMs = 0.0
+        var detectMs = 0.0
     }
 
     /// Read from the main thread: it touches the feed's published values.
@@ -204,21 +215,25 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         switch mode { case .follow: m = "follow"; case .hold: m = "hold"; case .wide: m = "wide"; case .shot: m = "shot" }
         let phase = follow.phase.rawValue, limited = follow.zoomLimited, zoom = geometry == nil ? nil : follow.planner.maxZoom
         let shot = self.shot.rawValue
+        let (frameMs, detectMs) = (self.frameMs, self.detectMs)
         let recent = dropWindow.add(now: Date(), sent: o.sent, dropped: o.dropped)
         lock.unlock()
         return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: blocked == nil && feed.live, problem: blocked ?? feed.problem,
                       outputLive: o.live, sent: o.sent, dropped: o.dropped, recentSent: recent.sent, recentDropped: recent.dropped,
                       runtimeMissing: o.runtimeMissing,
-                      mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal)
+                      mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal, frameMs: frameMs, detectMs: detectMs)
     }
 
     // MARK: Frames (capture thread)
 
     private func handle(_ pixels: CVPixelBuffer) {
         let w = CVPixelBufferGetWidth(pixels), h = CVPixelBufferGetHeight(pixels)
+        let began = DispatchTime.now().uptimeNanoseconds
         ensureGeometry(w, h)
         let crop = motion.advance(to: ProcessInfo.processInfo.systemUptime)
         output.submit(pixels, crop: crop, fps: feed.frameRate)
+        let spent = Double(DispatchTime.now().uptimeNanoseconds - began) / 1e6
+        lock.lock(); frameMs = Self.smoothed(frameMs, spent); lock.unlock()
         detectIfDue(pixels)
         previewIfWanted(pixels)
     }
@@ -268,6 +283,11 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         if case .shot(let crop) = mode { motion.setGoal(crop, cut: true) }
     }
 
+    /// A running average that settles in about twenty samples; the first sample is taken as it is.
+    static func smoothed(_ average: Double, _ sample: Double) -> Double {
+        average == 0 ? sample : average * 0.95 + sample * 0.05
+    }
+
     /// For tests and status: how it is being steered.
     var currentMode: VirtualMode { lock.lock(); defer { lock.unlock() }; return mode }
 
@@ -284,9 +304,12 @@ final class VirtualCameraRuntime: @unchecked Sendable {
             return
         }
         vision.async { [weak self] in
+            let began = DispatchTime.now().uptimeNanoseconds
             let people = AutoTracker.detect(small)
+            let spent = Double(DispatchTime.now().uptimeNanoseconds - began) / 1e6
             guard let self else { return }
             self.lock.lock()
+            self.detectMs = Self.smoothed(self.detectMs, spent)
             self.detecting = false
             if self.mode == .follow {
                 let goal = self.follow.update(people: people, now: Date())

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Setup > Virtual cameras: each fixed USB camera that follows a person by cropping its picture
 /// and goes out over NDI. Every choice is a switch, a menu or a control, and takes effect at once;
@@ -46,7 +47,7 @@ struct VirtualCamerasSetup: View {
 }
 
 /// Where a virtual camera's picture comes from.
-private enum InputKind: Hashable { case usb, ndi }
+private enum InputKind: Hashable { case usb, ndi, file }
 
 struct VirtualCameraCard: View {
     let cam: VirtualCamera
@@ -110,13 +111,23 @@ struct VirtualCameraCard: View {
             // Where the picture comes from: a USB capture device, or an NDI source on the network
             // (the camera as vMix or a switcher sends it).
             labeled("Input") {
-                Segments(items: [("USB capture", InputKind.usb), ("NDI source", InputKind.ndi)],
+                Segments(items: [("USB capture", InputKind.usb), ("NDI source", InputKind.ndi), ("Video file", InputKind.file)],
                          selection: Binding(
-                            get: { cam.ndiSource == nil ? .usb : .ndi },
-                            set: { kind in edit { $0.ndiSource = kind == .ndi ? ($0.ndiSource ?? "") : nil; $0.inputFormat = nil } }))
+                            get: { cam.videoFile != nil ? .file : (cam.ndiSource == nil ? .usb : .ndi) },
+                            set: { kind in edit {
+                                $0.ndiSource = kind == .ndi ? ($0.ndiSource ?? "") : nil
+                                $0.videoFile = kind == .file ? ($0.videoFile ?? "") : nil
+                                $0.inputFormat = nil
+                            } }))
             }
 
-            if cam.ndiSource == nil {
+            if cam.videoFile != nil {
+                labeled("Video file") {
+                    Button(cam.videoFile.flatMap { $0.isEmpty ? nil : ($0 as NSString).lastPathComponent } ?? "Choose a file…") { chooseFile() }
+                        .buttonStyle(CueButton(kind: .secondary))
+                }
+                labeled("") { note("A recorded clip plays in a loop as this camera's picture, to tune tracking without the camera.") }
+            } else if cam.ndiSource == nil {
                 labeled("Capture device") {
                     MenuField(text: device?.name ?? "Not found", width: 260) {
                         ForEach(devices, id: \.id) { d in Button(d.name) { edit { $0.device = d.id; $0.deviceName = d.name; $0.inputFormat = nil } } }
@@ -242,6 +253,14 @@ struct VirtualCameraCard: View {
             if old == .ndi { commitNDI() }
             if old == .group { commitGroup() }
         }
+    }
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie]
+        panel.canChooseDirectories = false
+        panel.message = "Choose a recorded clip to play in a loop as this camera's picture"
+        if panel.runModal() == .OK, let url = panel.url { edit { $0.videoFile = url.path } }
     }
 
     private func label(for size: String) -> String {

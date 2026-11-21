@@ -1,6 +1,8 @@
 import XCTest
 import NDIBridge
 import CoreGraphics
+import AVFoundation
+import CoreVideo
 @testable import CueVideo
 
 /// The virtual PTZ: where the crop goes for a person, how it moves, and how it is set up.
@@ -803,5 +805,71 @@ final class ManualFramingTests: XCTestCase {
         XCTAssertEqual(cam.nextShotName, "Shot 1")
         cam.shots = [CropShot(name: "Shot 1", crop: .full), CropShot(name: "shot 3", crop: .full)]
         XCTAssertEqual(cam.nextShotName, "Shot 2")
+    }
+}
+
+final class VideoFileInputTests: XCTestCase {
+    /// A tiny clip of `count` frames at 10 fps, written with AVAssetWriter into a temp folder.
+    private func makeClip(count: Int) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cue-clip-\(UUID().uuidString).mov")
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 320, AVVideoHeightKey: 180])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 320, kCVPixelBufferHeightKey as String: 180])
+        writer.add(input)
+        writer.startWriting()
+        writer.startSession(atSourceTime: .zero)
+        for i in 0..<count {
+            var buffer: CVPixelBuffer?
+            CVPixelBufferCreate(nil, 320, 180, kCVPixelFormatType_32BGRA, nil, &buffer)
+            while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.005) }
+            adaptor.append(buffer!, withPresentationTime: CMTime(value: Int64(i), timescale: 10))
+        }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        return url
+    }
+
+    func testPlaysTheClipInALoopAtItsOwnPace() throws {
+        let url = try makeClip(count: 5)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let feed = VideoFileFeed(path: url.path)
+        var count = 0
+        let lock = NSLock()
+        let id = feed.subscribe { _ in lock.lock(); count += 1; lock.unlock() }
+        feed.start()
+        defer { feed.unsubscribe(id); feed.stop() }
+        Thread.sleep(forTimeInterval: 1.6)   // 5 frames at 10 fps last 0.5 s: more than 5 frames means it looped
+        lock.lock(); let n = count; lock.unlock()
+        XCTAssertGreaterThan(n, 8)
+        XCTAssertLessThan(n, 22)             // and not played flat out
+        XCTAssertTrue(feed.live)
+        XCTAssertTrue(feed.shape.hasPrefix("320x180"))
+    }
+
+    func testAMissingFileSaysSo() {
+        let feed = VideoFileFeed(path: "/nonexistent/clip.mov")
+        feed.start()
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertFalse(feed.live)
+        XCTAssertTrue(feed.problem?.contains("isn't there") ?? false)
+    }
+
+    func testTheFileIsPartOfThePipelineAndSurvivesTheSetupFile() throws {
+        var cam = VirtualCamera(device: "d", ndiName: "n")
+        let before = cam.pipeline
+        cam.videoFile = "/tmp/a.mov"
+        XCTAssertNotEqual(cam.pipeline, before)
+        let back = try JSONDecoder().decode(VirtualCamera.self, from: JSONEncoder().encode(cam))
+        XCTAssertEqual(back.videoFile, "/tmp/a.mov")
+    }
+
+    func testSmoothedAverageStartsAtTheFirstSample() {
+        XCTAssertEqual(VirtualCameraRuntime.smoothed(0, 8), 8)
+        XCTAssertEqual(VirtualCameraRuntime.smoothed(10, 20), 10.5, accuracy: 1e-9)
     }
 }

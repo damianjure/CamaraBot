@@ -633,6 +633,8 @@ enum StatusReport {
             ("NDI output", s.runtimeMissing ? "NDI isn't installed on this Mac" : (s.outputLive ? "Sending as \(s.ndiName), \(s.sent) frames, \(s.dropped) dropped" : "Not sending")),
             ("Steering", s.mode == "follow" ? "Follow (\(s.shot)), \(s.phase)" : s.mode),
             ("Zoom", (s.maxZoom.map { String(format: "up to %.2f×", $0) } ?? "not known yet") + (s.zoomLimited ? ", at the limit" : "")),
+            ("Speed", s.frameMs == 0 ? "Not measured yet" : String(format: "%.1f ms to crop and send a frame", s.frameMs)
+                + (s.detectMs == 0 ? "" : String(format: ", %.0f ms to find people", s.detectMs))),
             ("Problem", problems.isEmpty ? "None" : problems.joined(separator: "; ")),
         ]
     }

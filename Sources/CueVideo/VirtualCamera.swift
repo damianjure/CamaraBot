@@ -50,6 +50,8 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// An NDI source to take the picture from instead of a capture device, such as the camera as
     /// vMix or a switcher sends it: "COMPUTER (Channel)". Nil (or empty) uses the capture device.
     var ndiSource: String?
+    /// A recorded clip played in a loop as the picture, to test and tune tracking without the camera.
+    var videoFile: String?
     /// Which format to ask the device for, as "3840x2160". Nil takes the largest it offers.
     var inputFormat: String?
     var output: OutputSize = .p1080
@@ -79,7 +81,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         self.ndiName = ndiName
     }
 
-    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, inputFormat, output, ndiName, ndiGroups, maxZoom, shotSize, shots, atemInput, startMode, startShot }
+    private enum Keys: String, CodingKey { case id, name, enabled, device, deviceName, ndiSource, videoFile, inputFormat, output, ndiName, ndiGroups, maxZoom, shotSize, shots, atemInput, startMode, startShot }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -89,6 +91,7 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
         device = try c.decodeIfPresent(String.self, forKey: .device) ?? ""
         deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName)
         ndiSource = try c.decodeIfPresent(String.self, forKey: .ndiSource)
+        videoFile = try c.decodeIfPresent(String.self, forKey: .videoFile)
         inputFormat = try c.decodeIfPresent(String.self, forKey: .inputFormat)
         output = try c.decodeIfPresent(OutputSize.self, forKey: .output) ?? .p1080
         ndiName = try c.decodeIfPresent(String.self, forKey: .ndiName) ?? name
@@ -147,6 +150,6 @@ struct VirtualCamera: Codable, Hashable, Identifiable {
     /// else (the name, saved shots, the shot size) is applied to the running camera, so saving a
     /// shot never drops a source that may be on air.
     var pipeline: String {
-        [device, inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
+        [device, videoFile ?? "", inputSource ?? "", inputFormat ?? "", output.rawValue, ndiName, ndiGroups ?? "", maxZoom.map { String($0) } ?? ""].joined(separator: "|")
     }
 }
