@@ -82,6 +82,14 @@ final class Booth: ObservableObject {
         case 36, 76: atem.auto(me: me); return true
         default: break
         }
+        // Q W E R T / A S D F G: the shot deck's tiles, for the camera on Next. [ and ] turn its page.
+        if !e.modifierFlags.contains(.option), !e.modifierFlags.contains(.control),
+           let cam = cameraOnNext, (atem.state.tally[cam.atemInput ?? -1] ?? 0) & 1 == 0 {
+            let deck = ShotDeckState.shared
+            if let slot = ShotDeckState.keyCodes[e.keyCode] { deck.press(slot: slot, camera: cam, ptz); return true }
+            if e.keyCode == 33 { deck.turn(cam, by: -1, ptz); return true }
+            if e.keyCode == 30 { deck.turn(cam, by: 1, ptz); return true }
+        }
         let digits: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4, 22: 5, 26: 6, 28: 7, 25: 8, 29: 9]
         if let i = digits[e.keyCode] {
             let src = store.volunteerSources(atem.state)

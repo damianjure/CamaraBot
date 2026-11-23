@@ -44,9 +44,12 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
     public var presetNames: [Int: String] = [:]
     /// Shots saved in CueVideo (not on the camera), in button order.
     public var shots: [PTZShot] = []
+    /// The order the camera's own presets are shown in, by preset number. Ones not listed
+    /// come after, by number.
+    public var presetOrder: [Int] = []
     public init() {}
 
-    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots }
+    private enum Keys: String, CodingKey { case id, name, host, port, proto, atemInput, firstPreset, presetNames, shots, presetOrder }
 
     /// Lenient, so a camera can be written by hand (or by Claude) in the config file:
     /// only `host` is needed, everything else has a sensible default. The port follows
@@ -62,6 +65,7 @@ public struct PTZCamera: Codable, Identifiable, Hashable {
         firstPreset = try c.decodeIfPresent(Int.self, forKey: .firstPreset) ?? 0
         presetNames = try c.decodeIfPresent([Int: String].self, forKey: .presetNames) ?? [:]
         shots = try c.decodeIfPresent([PTZShot].self, forKey: .shots) ?? []
+        presetOrder = try c.decodeIfPresent([Int].self, forKey: .presetOrder) ?? []
     }
 }
 

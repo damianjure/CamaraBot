@@ -157,3 +157,88 @@ final class AppearanceTests: XCTestCase {
         XCTAssertNotNil(StageScan.thumb(picture(), CGRect(x: 0.2, y: 0.2, width: 0.2, height: 0.5)))
     }
 }
+
+/// Gestures don't move the camera: the edge alarm goes by head and torso, never an arm.
+final class EdgeAlarmTests: XCTestCase {
+    /// Standing in the middle with an arm stretched out to the side of the frame: the whole
+    /// body's box reaches the edge, the head and torso don't.
+    func testAnOutstretchedArmIsNotNearTheEdge() {
+        let torso = CGRect(x: 0.42, y: 0.2, width: 0.16, height: 0.5)
+        XCTAssertEqual(AutoTracker.edgeUrgency(core: torso, eyeX: 0.5, right: true), 0)
+        let withArm = CGRect(x: 0.42, y: 0.2, width: 0.47, height: 0.5)
+        XCTAssertGreaterThan(AutoTracker.edgeUrgency(core: withArm, eyeX: 0.5, right: true), 0)
+    }
+
+    func testATorsoNearTheEdgeStillAlarms() {
+        let torso = CGRect(x: 0.78, y: 0.2, width: 0.16, height: 0.5)
+        XCTAssertGreaterThan(AutoTracker.edgeUrgency(core: torso, eyeX: 0.86, right: true), 0.5)
+        XCTAssertEqual(AutoTracker.edgeUrgency(core: torso, eyeX: 0.86, right: false), 0)
+    }
+
+    /// Walking right: the full lead, with them left of the middle and room ahead on the right.
+    func testWalkingGetsTheFullLeadAhead() {
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: 0.3, facing: 1, leadRoom: 0.11), -0.11, accuracy: 1e-9)
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: -0.3, facing: 1, leadRoom: 0.11), 0.11, accuracy: 1e-9)
+    }
+
+    /// Standing at a music stand and turning to each side of the room only nudges the mark,
+    /// so the shot doesn't swing a fifth of the frame every time they look the other way.
+    func testStandingAndTurningOnlyNudges() {
+        let left = AutoTracker.leadTarget(walkVX: 0, facing: -1, leadRoom: 0.11)
+        let right = AutoTracker.leadTarget(walkVX: 0, facing: 1, leadRoom: 0.11)
+        XCTAssertLessThan(abs(left - right), 0.08)
+        XCTAssertEqual(AutoTracker.leadTarget(walkVX: 0, facing: 0, leadRoom: 0.11), 0)
+    }
+
+    /// Looking to one side with the shoulders still square to the camera is not a body turn.
+    func testAHeadTurnAloneIsNotABodyTurn() {
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 1, span: 1.7, square: 1.8), 0)
+    }
+
+    /// Shoulders narrowed and the head the same way: turned that way.
+    func testNarrowShouldersAndHeadTogetherAreABodyTurn() {
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: -1, span: 1.0, square: 1.8), -1)
+        // Narrow shoulders with no clear head direction (straight on, or away): unclear.
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 0, span: 1.0, square: 1.8), 0)
+        XCTAssertEqual(AutoTracker.bodyTurn(facing: 1, span: nil, square: 1.8), 0)
+    }
+
+    /// A move the way they're turned is confirmed sooner; against it, or square on, the usual wait.
+    func testWalksTheWayTheyAreTurnedConfirmSooner() {
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: 1, bodyTurn: 1), 0.25)
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: -1, bodyTurn: 1), 0.5)
+        XCTAssertEqual(AutoTracker.walkConfirm(direction: 1, bodyTurn: 0), 0.5)
+    }
+
+    /// Sureness of a walk builds over the rise time, and a moment's dip only dents it, so the
+    /// camera doesn't drop speed every time the measured speed wobbles.
+    func testABriefDipDoesNotEndAWalk() {
+        var w = 0.0
+        for _ in 0..<8 { w = AutoTracker.walkWeight(w, moving: 1, dt: 0.07, rise: 0.5) }
+        XCTAssertEqual(w, 1, accuracy: 1e-9)
+        w = AutoTracker.walkWeight(w, moving: 0, dt: 0.07, rise: 0.5)
+        XCTAssertGreaterThan(w, 0.8)
+        // Moving the other way first fades the old walk to nothing, never flips straight over.
+        for _ in 0..<20 { w = AutoTracker.walkWeight(w, moving: -1, dt: 0.07, rise: 0.5) }
+        XCTAssertLessThanOrEqual(w, 0)
+    }
+
+    /// Asked to go from slow to fast at once, the camera eases up over several frames.
+    func testSpeedUpsAreEased() {
+        var r = 0.1
+        r = AutoTracker.easeRate(from: r, to: 0.8, dt: 0.07, urgent: false, speed: 0.5)
+        XCTAssertLessThan(r, 0.25)
+        for _ in 0..<15 { r = AutoTracker.easeRate(from: r, to: 0.8, dt: 0.07, urgent: false, speed: 0.5) }
+        XCTAssertEqual(r, 0.8, accuracy: 0.05)
+    }
+
+    /// Zoomed in tight, a small correction still moves the camera at its slowest speed;
+    /// settled, the same small amount is no move at all.
+    func testSmallCorrectionsStillMoveWhenCorrecting() {
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 8, correcting: true), 20)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: -8, correcting: true), -20)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 8, correcting: false), 0)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 0.4, correcting: true), 0)
+        XCTAssertEqual(AutoTracker.cameraSpeed(raw: 1234, correcting: false), 1230)
+    }
+}

@@ -149,7 +149,7 @@ final class CropPlannerTests: XCTestCase {
         let p = CropPlanner(maxZoom: 2.5)
         var v = VirtualFollow(planner: p, framing: waist)
         func person(_ x: Double) -> TrackedPerson {
-            TrackedPerson(box: CGRect(x: x - 0.03, y: 0.3, width: 0.06, height: 0.3), eye: CGPoint(x: x, y: 0.35), scale: 0.06)
+            TrackedPerson(box: CGRect(x: x - 0.03, y: 0.3, width: 0.06, height: 0.3), core: CGRect(x: x - 0.03, y: 0.3, width: 0.06, height: 0.3), eye: CGPoint(x: x, y: 0.35), scale: 0.06)
         }
         let t0 = Date()
         // Two people: the one nearest the middle is picked.
@@ -293,7 +293,7 @@ final class VirtualCameraPipelineTests: XCTestCase {
         same.atemInput = 4
         XCTAssertEqual(same.pipeline, base.pipeline)
         for change: (inout VirtualCamera) -> Void in [
-            { $0.device = "other" }, { $0.inputFormat = "1920x1080" }, { $0.output = .p720 }, { $0.ndiName = "Other" }, { $0.maxZoom = 2 },
+            { $0.device = "other" }, { $0.inputFormat = "1920x1080" }, { $0.output = .p720 }, { $0.ndiName = "Other" },
         ] {
             var c = base
             change(&c)
@@ -758,7 +758,7 @@ final class PictureGeometryTests: XCTestCase {
     func testAPickedPointChoosesThePersonUnderIt() {
         var follow = VirtualFollow(planner: CropPlanner(maxZoom: 2.5), framing: Framing(ShotSize.waist.standard))
         func person(_ x: CGFloat) -> TrackedPerson {
-            TrackedPerson(box: CGRect(x: x - 0.05, y: 0.2, width: 0.1, height: 0.5), eye: CGPoint(x: x, y: 0.3), scale: 0.1)
+            TrackedPerson(box: CGRect(x: x - 0.05, y: 0.2, width: 0.1, height: 0.5), core: CGRect(x: x - 0.05, y: 0.2, width: 0.1, height: 0.5), eye: CGPoint(x: x, y: 0.3), scale: 0.1)
         }
         follow.release(pick: CGPoint(x: 0.8, y: 0.4))
         follow.update(people: [person(0.2), person(0.5), person(0.8)], now: Date())

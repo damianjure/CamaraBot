@@ -70,7 +70,10 @@ enum ShotSize: String, CaseIterable, Identifiable {
 
 /// One person found in a frame. Coordinates are normalized with the origin top left.
 struct TrackedPerson {
+    /// Everything of them in view, arms and legs included (for the outline and their look).
     var box: CGRect
+    /// Head and torso only: where they are, however their arms move.
+    var core: CGRect
     /// Between the eyes (or the nose, or the ears).
     var eye: CGPoint
     /// Eyes to shoulders, as a share of frame height. Nil when the body landmarks aren't clear.
@@ -79,8 +82,13 @@ struct TrackedPerson {
     var anklesInShot = false
     /// -1 facing left in the picture, 1 facing right, 0 toward the camera or unclear.
     var facing = 0
+    /// Shoulder to shoulder against the eyes-to-shoulders drop, both in frame heights. Narrower
+    /// than usual for them means the whole body has turned, not just the head.
+    var shoulderSpan: Double?
     /// What they look like, for telling people apart. Nil when they're too small to tell.
     var appearance: Appearance?
+    /// Found by outline alone, with no landmarks: the eye point is a guess from the outline.
+    var outline = false
 
     var size: ShotSize? { ShotSize.classify(scale: scale, anklesInShot: anklesInShot, hipsInShot: hipsInShot) }
 }
@@ -122,7 +130,6 @@ final class AutoTracker: ObservableObject {
         var panning = false, tilting = false, zooming = false
         /// Pan and tilt last sent, in the camera's units (hundredths of a degree a second).
         var sentPan = 0.0, sentTilt = 0.0, sentZoom = 0.0
-        var panDir = 0, panDirSince = Date()
 
         // Motion, measured. The camera reports its angle of view, so moves are worked out in
         // real angles: how fast the person is really going, and how fast the camera really
@@ -145,7 +152,12 @@ final class AutoTracker: ObservableObject {
         /// For the first moments, the size to hold follows the (smoothed) size they're at.
         var holdLearnUntil = Date.distantPast
         /// Walking: the direction they've been clearly moving, and since when.
-        var walkX = 0, walkXSince = Date(), walkY = 0, walkYSince = Date()
+        /// Walking: how sure we are they're walking each way (-1 to 1; the sign is the direction),
+        /// and their steady walking speed in frames a second, held through a moment's dip.
+        var walkW = 0.0, walkSpeed = 0.0, walkWY = 0.0, walkSpeedY = 0.0
+        /// Their shoulder span squared up to the camera (the widest lately), and which way their
+        /// whole body has been turned (-1 left, 1 right, 0 square on) and since when.
+        var squareSpan: Double?, turn = 0, turnSince = Date()
 
         // Who it's following. A few pictures of what they look like (the first `anchors` are
         // kept for good: the ones from the stage scan, or the first sight of them; the rest
@@ -160,6 +172,8 @@ final class AutoTracker: ObservableObject {
         var ownLook: Double?, otherLook: Double?
         /// Since when they've been the only person around (then it's safe to learn their look).
         var aloneSince: Date?
+        /// Since when their landmarks have been hidden and only their outline shows.
+        var headAt: Date?
     }
 
     @Published private(set) var sessions: [UUID: Session] = [:]
@@ -319,8 +333,16 @@ final class AutoTracker: ObservableObject {
             let scale: Double? = long.max() ?? short
             // Top of the head is about half the eyes-to-shoulders drop above the eyes.
             let top = eye.y - CGFloat(scale ?? 0.05) * 0.6
+            // Head and torso, without the arms or legs: a raised or reaching arm widens the whole
+            // body's box but leaves this where it is, so a gesture never reads as moving.
+            let trunk = [eye, shoulders, ls, rs, hip, at(.leftHip), at(.rightHip), at(.nose), at(.leftEar), at(.rightEar)].compactMap { $0 }
+            let tMinX = trunk.map(\.x).min() ?? eye.x, tMaxX = trunk.map(\.x).max() ?? eye.x
+            let tMaxY = trunk.map(\.y).max() ?? eye.y
+            // With only the head in view, allow for the shoulders (about the eyes-to-shoulders drop each side).
+            let pad = CGFloat(shoulders == nil ? (scale ?? 0.05) : 0)
+            let core = CGRect(x: tMinX - pad, y: top, width: max(0.02, tMaxX - tMinX + pad * 2), height: max(0.02, tMaxY - top))
             var p = TrackedPerson(box: CGRect(x: minX, y: top, width: max(0.02, maxX - minX), height: max(0.02, maxY - top)),
-                                  eye: eye, scale: scale)
+                                  core: core, eye: eye, scale: scale)
             p.hipsInShot = at(.root) != nil || at(.leftHip) != nil || at(.rightHip) != nil
             p.anklesInShot = at(.leftAnkle) != nil || at(.rightAnkle) != nil
             // Facing: the nose sits off the line between the shoulders on the side they face.
@@ -333,6 +355,8 @@ final class AutoTracker: ObservableObject {
             } else if at(.rightEar) != nil, at(.leftEar) == nil, let n = at(.nose), let e = at(.rightEar) {
                 p.facing = n.x > e.x ? 1 : -1
             }
+            // Frame x is in widths; a 16:9 width is 16/9 heights.
+            if let l = ls, let r = rs, let sc = scale, sc > 0.005 { p.shoulderSpan = Double(abs(l.x - r.x)) * 16 / 9 / sc }
             found.append(p)
         }
         // People too small or turned away for landmarks still show as a body: follow them by
@@ -341,7 +365,7 @@ final class AutoTracker: ObservableObject {
             let b = r.boundingBox
             let box = CGRect(x: b.minX, y: 1 - b.maxY, width: b.width, height: b.height)
             if found.contains(where: { $0.box.intersects(box) && box.contains($0.eye) }) { continue }
-            found.append(TrackedPerson(box: box, eye: CGPoint(x: box.midX, y: box.minY + box.height * 0.12)))
+            found.append(TrackedPerson(box: box, core: box, eye: CGPoint(x: box.midX, y: box.minY + box.height * 0.12), scale: nil, outline: true))
         }
         // What each person looks like (the biggest few in the shot), to tell them apart.
         let biggest = found.indices.sorted { found[$0].box.width * found[$0].box.height > found[$1].box.width * found[$1].box.height }
@@ -363,7 +387,7 @@ final class AutoTracker: ObservableObject {
             } else {
                 // First sight: take the person under the click, or nearest it (the middle by default).
                 let p = s.pick ?? CGPoint(x: 0.5, y: 0.5)
-                pick = people.first { $0.box.contains(p) } ?? people.min { dist($0.box.center, p) < dist($1.box.center, p) }
+                pick = people.first { $0.box.contains(p) } ?? people.min { dist($0.core.center, p) < dist($1.core.center, p) }
             }
             if let pick {
                 s.target = pick
@@ -390,14 +414,21 @@ final class AutoTracker: ObservableObject {
         // Keep hold of the same person: by where they were and by what they look like.
         let last = s.target!
         let gone = now.timeIntervalSince(s.lastSeen)
-        let reach = min(0.5, 0.2 + max(last.box.width, last.box.height) * 0.6 + gone * 0.15)
+        let reach = min(0.5, 0.2 + max(last.core.width, last.core.height) * 0.6 + gone * 0.15)
         let candidates = people.map { p in
-            IdentityMatch.Candidate(position: dist(p.box.center, last.box.center),
+            IdentityMatch.Candidate(position: dist(p.core.center, last.core.center),
                                     appearance: s.gallery.isEmpty ? nil : p.appearance?.distance(to: s.gallery))
         }
         let choice = IdentityMatch.choose(candidates, reach: reach, gone: gone, model: .init(own: s.ownLook, others: s.otherLook))
         if case let .take(i, sure) = choice {
-            let next = people[i]
+            var next = people[i]
+            // Arms up or across the body can hide the landmarks for a moment, leaving only an
+            // outline whose middle shifts with the arms. For that moment keep the head where it
+            // was last really seen; after it, follow the outline as before.
+            if next.outline, !last.outline || s.headAt != nil {
+                if s.headAt == nil { s.headAt = now }
+                if now.timeIntervalSince(s.headAt!) < 0.8 { next.eye = last.eye; next.core = last.core; next.outline = last.outline }
+            } else { s.headAt = nil }
             learn(&s, next, candidates, i, sure: sure, reach: reach, gone: gone, now: now)
             s.target = next
             s.lastSeen = now
@@ -457,13 +488,6 @@ final class AutoTracker: ObservableObject {
         let size = s.size
         if s.asked == nil, now < s.holdLearnUntil, let sc = s.scale { s.holdScale = sc }
 
-        // Lead room: walking one way (the camera has been panning that way a while) wins over
-        // which way they face. Eased so the frame doesn't jump when they turn.
-        let dir = s.panDir != 0 && now.timeIntervalSince(s.panDirSince) > 0.7 ? s.panDir : person.facing
-        s.lead += (Double(-dir) * size.leadRoom - s.lead) * 0.06
-        let markX = 0.5 + s.lead
-
-        let ex = eye.x - markX                 // right of the mark: pan right
         let ey = size.eyeLine - eye.y          // eyes above the line: tilt up
         let k = config.trackSpeed
         let fovX = s.fov, fovY = s.fov * 9 / 16
@@ -497,66 +521,85 @@ final class AutoTracker: ObservableObject {
         }
         s.moveX += ((s.imgVX + camRX) - s.moveX) * 0.2
         s.moveY += ((camRY - s.imgVY) - s.moveY) * 0.2
-        // Only clear, steady movement one way for half a second counts as walking; anything
-        // smaller is a shift of weight or measurement noise, and the camera just holds framing.
-        func walking(_ v: Double, _ dir: inout Int, _ since: inout Date, _ min: Double) -> Double {
+        // Which way their whole body is turned: shoulders narrower than usual for them, and the
+        // head pointing the same way, held a moment. A head turn alone (looking to one side of
+        // the room from a music stand) leaves the shoulders square, so it doesn't count.
+        if let span = person.shoulderSpan {
+            // The widest lately, slowly forgotten (about halving in ten seconds) as zoom and pose drift.
+            s.squareSpan = max(span, (s.squareSpan ?? span) * 0.995)
+        }
+        let turnNow = Self.bodyTurn(facing: person.facing, span: person.shoulderSpan, square: s.squareSpan)
+        if turnNow != s.turn { s.turn = turnNow; s.turnSince = now }
+        let bodyDir = now.timeIntervalSince(s.turnSince) > 0.3 ? s.turn : 0
+
+        // Walking, as a steady speed the camera keeps up, not an on-off switch. Clear movement
+        // one way builds up the sureness that they're walking (fully sure in half a second, or a
+        // quarter the way their body is turned); anything else lets it fade over 0.6 s. The camera
+        // is given their walking speed, smoothed and held through a moment's dip, in proportion
+        // to that sureness. An on-off switch here sent the camera fast, then slow, then fast
+        // again, as their measured speed wobbled either side of the line.
+        func walking(_ v: Double, _ w: inout Double, _ speed: inout Double, _ min: Double, toward: Int) -> Double {
             let d = v > min ? 1 : (v < -min ? -1 : 0)
-            if d != dir { dir = d; since = now }
-            return d != 0 && now.timeIntervalSince(since) > 0.5 ? v : 0
+            w = Self.walkWeight(w, moving: d, dt: dtFrame, rise: Self.walkConfirm(direction: d, bodyTurn: toward))
+            if w == 0 { speed = 0; return 0 }
+            if d != 0, (d > 0) == (w > 0) { speed += (v - speed) * 0.15 }
+            guard (speed > 0) == (w > 0) else { return 0 }
+            let a = abs(w)
+            return speed * a * a * (3 - 2 * a)   // eased in and out
         }
         let walkMin = tune.walkThreshold ?? 0.12
-        let walkVX = walking(s.moveX, &s.walkX, &s.walkXSince, walkMin)
-        let walkVY = walking(s.moveY, &s.walkY, &s.walkYSince, walkMin * 1.25)
+        let walkVX = walking(s.moveX, &s.walkW, &s.walkSpeed, walkMin, toward: bodyDir)
+        let walkVY = walking(s.moveY, &s.walkWY, &s.walkSpeedY, walkMin * 1.25, toward: 0)
+        let walkingX = abs(s.walkW) > 0.3, walkingY = abs(s.walkWY) > 0.3
         let relX = s.imgVX, relY = -s.imgVY
+
+        // Lead room: only when they're really walking does the full lead go ahead of them.
+        // Never from which way the camera is panning: that fed on itself, the lead pushing the
+        // camera on, the move reading as a walk, and the shot swinging past someone standing
+        // still. Standing, which way they face (turning to each side of the room) only nudges it.
+        // Eased so the frame doesn't jump when they turn.
+        s.lead += (Self.leadTarget(walkVX: abs(s.walkW) > 0.5 ? walkVX : 0, facing: bodyDir, leadRoom: size.leadRoom) - s.lead) * 0.06
+        let ex = eye.x - (0.5 + s.lead)        // right of the mark: pan right
 
         // Edge alarm: how close their body is to the side of the frame they're heading for,
         // 0 (comfortable) to 1 (touching it). Near the edge the camera corrects harder.
-        // Their body's edge, or on a tight shot (body wider than half the frame) their head.
-        let box = person.box
-        let gap = box.width < 0.5 ? (ex > 0 ? 1 - box.maxX : box.minX)
-                                  : (ex > 0 ? 1 - eye.x : eye.x) - 0.1
-        let urgency = min(1, max(0, (0.2 - gap) / 0.2))
+        // Their head and torso's edge (never an arm: gestures don't move the camera), or on a
+        // tight shot (torso wider than half the frame) their head.
+        let box = person.core
+        let urgency = Self.edgeUrgency(core: box, eyeX: eye.x, right: ex > 0)
 
         // Move while they're off the mark or walking; settle once they stand still on it.
-        if abs(ex) > size.deadX || walkVX != 0 || urgency > 0 { s.panning = true }
-        else if abs(ex) < size.deadX * 0.5 && walkVX == 0 { s.panning = false }
+        if abs(ex) > size.deadX || walkingX || urgency > 0 { s.panning = true }
+        else if abs(ex) < size.deadX * 0.5 && !walkingX { s.panning = false }
         let tiltOn = config.trackTilt
-        if tiltOn, abs(ey) > size.deadY || walkVY != 0 { s.tilting = true }
-        else if !tiltOn || (abs(ey) < size.deadY * 0.5 && walkVY == 0) { s.tilting = false }
+        if tiltOn, abs(ey) > size.deadY || walkingY { s.tilting = true }
+        else if !tiltOn || (abs(ey) < size.deadY * 0.5 && !walkingY) { s.tilting = false }
         _ = (relX, relY)
 
         // The camera speed to ask for, in frames a second: their own speed, plus a gentle pull
         // toward the mark (stronger near the edge). Tested in simulation against a camera that
         // turns faster or slower than expected and a picture delay of 0.3 to 0.65 s: it keeps
-        // up with walking and settles without hunting. Speed-ups are limited so moves start smoothly.
+        // up with walking and settles without hunting. Every change of speed, starting, stopping
+        // or catching up, is eased (see easeRate), so the camera glides instead of lurching.
         func rate(_ e: Double, _ move: Double, _ on: Bool, _ prev: Double) -> Double {
-            guard on else { return 0 }
             let kp = min(2.5, min(1.6, (tune.correction ?? 1.2) * k) * (1 + 1.5 * urgency))
-            let want = move + kp * e
-            let accel = (urgency > 0.3 ? 16.0 : 8.0 * max(1, k)) * dtFrame
-            let decel = 16.0 * max(1, k) * dtFrame
-            let step = abs(want) < abs(prev) || want * prev < 0 ? decel : accel
-            return prev + max(-step, min(step, want - prev))
+            let want = on ? move + kp * e : 0
+            return Self.easeRate(from: prev, to: want, dt: dtFrame, urgent: urgency > 0.3, speed: k)
         }
         let camNowX = s.sentPan / 100 * s.gainPan / fovX, camNowY = s.sentTilt / 100 * s.gainTilt / fovY
         let rx = rate(ex, walkVX, s.panning, camNowX)
         let ry = rate(ey, walkVY, s.tilting, camNowY)
         let camX = camRX
         // Back into the camera's units: degrees a second (× 100), allowing for how it really turns.
-        func units(_ r: Double, _ fov: Double, _ g: Double) -> Double {
-            let raw = r * fov * 100 / max(0.05, g)
-            if abs(raw) < 15 { return 0 }
-            return (min(10000, max(20, abs(raw))) / 10).rounded() * 10 * (raw < 0 ? -1 : 1)
+        func units(_ r: Double, _ fov: Double, _ g: Double, _ correcting: Bool) -> Double {
+            Self.cameraSpeed(raw: r * fov * 100 / max(0.05, g), correcting: correcting)
         }
-        let pan = units(rx, fovX, s.gainPan)
-        let tilt = units(ry, fovY, s.gainTilt)
-        TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f",
+        let pan = units(rx, fovX, s.gainPan, s.panning)
+        let tilt = units(ry, fovY, s.gainTilt, s.tilting)
+        TrackLog.shared.write(String(format: "%.3f,%@,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f,%.2f,%d,%.3f,%.3f,%d,%.2f,%.2f",
             now.timeIntervalSince1970, cameras[s.camera]?.name ?? "?", eye.x, ex, ey, s.imgVX, s.moveX, camX, rx,
-            s.fov, s.gainPan, pan, tilt, urgency, s.panning ? 1 : 0, box.minX, box.maxX))
-
-        // Walking direction (the way the camera is following), for lead room.
-        let d = pan > 150 ? 1 : (pan < -150 ? -1 : 0)
-        if d != s.panDir { s.panDir = d; s.panDirSince = now }
+            s.fov, s.gainPan, pan, tilt, urgency, s.panning ? 1 : 0, box.minX, box.maxX,
+            bodyDir, person.shoulderSpan.flatMap { sp in s.squareSpan.map { sp / max($0, 0.001) } } ?? -1, s.walkW))
 
         // Hold the shot size as they come nearer or move away, calmly: only when the size has
         // been clearly wrong (over about a third) for 1.5 s, slowly, with a rest of 2 s after
@@ -588,6 +631,64 @@ final class AutoTracker: ObservableObject {
             s.zooming = false; s.zoomEnded = now
         }
         send(&s, pan, tilt, zoom)
+    }
+
+    /// Where the lead room puts the mark, off the middle (negative: left of it, leaving room on
+    /// the right). The full lead ahead of someone walking; a little toward where someone
+    /// standing faces.
+    static func leadTarget(walkVX: Double, facing: Int, leadRoom: Double) -> Double {
+        if walkVX != 0 { return walkVX > 0 ? -leadRoom : leadRoom }
+        return Double(-facing) * leadRoom * 0.35
+    }
+
+    /// Which way someone's whole body is turned: their head's way, when their shoulders show
+    /// under 70% of their squared-up width. 0 when square on or unclear.
+    static func bodyTurn(facing: Int, span: Double?, square: Double?) -> Int {
+        guard facing != 0, let span, let square, square > 0 else { return 0 }
+        return span < square * 0.7 ? facing : 0
+    }
+
+    /// How sure we are someone is walking, -1 to 1 (the sign is the direction), after one
+    /// frame: clear movement one way (`moving`) builds it to full in `rise` seconds; no clear
+    /// movement, or movement the other way, lets it fade to nothing over `fall` seconds first.
+    static func walkWeight(_ w: Double, moving: Int, dt: Double, rise: Double, fall: Double = 0.6) -> Double {
+        let dir = w > 0 ? 1 : (w < 0 ? -1 : 0)
+        if moving != 0, dir == 0 || dir == moving { return max(-1, min(1, w + Double(moving) * dt / rise)) }
+        let faded = w - Double(dir) * dt / fall
+        return dir > 0 ? max(0, faded) : min(0, faded)
+    }
+
+    /// The next camera speed (frames a second) on the way from `prev` to `want`: at most
+    /// 1.5 frames a second more each second (3 near the edge of frame, or when slowing),
+    /// and only part of the way there each frame, so it eases into the new speed.
+    static func easeRate(from prev: Double, to want: Double, dt: Double, urgent: Bool, speed k: Double) -> Double {
+        let slowing = abs(want) < abs(prev) || want * prev < 0
+        let limit = (slowing || urgent ? 3.0 : 1.5) * max(1, k) * dt
+        // Slows a little more readily than it speeds up, so it doesn't coast past someone stopping.
+        let step = min(limit, max(abs(want - prev) * (slowing ? 0.5 : 0.35), 0.005))
+        return prev + max(-step, min(step, want - prev))
+    }
+
+    /// A speed for the camera, in its units (hundredths of a degree a second; 20 is its
+    /// slowest). Settled, anything under 15 is no move, so it doesn't twitch. Correcting (they're
+    /// outside the dead zone), anything that isn't nothing is at least the slowest speed: zoomed
+    /// in tight, a correction can work out under 15, and rounding it to nothing left the camera
+    /// never fixing it (a head held against the top of the frame, the tilt never moving).
+    static func cameraSpeed(raw: Double, correcting: Bool) -> Double {
+        if abs(raw) < (correcting ? 1 : 15) { return 0 }
+        return (min(10000, max(20, abs(raw))) / 10).rounded() * 10 * (raw < 0 ? -1 : 1)
+    }
+
+    /// Seconds of steady movement before it counts as a walk: sooner the way they're turned.
+    static func walkConfirm(direction: Int, bodyTurn: Int) -> Double {
+        direction != 0 && direction == bodyTurn ? 0.25 : 0.5
+    }
+
+    /// How close someone is to the side of the frame they're heading for: 0 comfortable, 1 touching.
+    static func edgeUrgency(core: CGRect, eyeX: CGFloat, right: Bool) -> Double {
+        let gap = core.width < 0.5 ? (right ? 1 - core.maxX : core.minX)
+                                   : (right ? 1 - eyeX : eyeX) - 0.1
+        return min(1, max(0, (0.2 - Double(gap)) / 0.2))
     }
 
     private func hold(_ s: inout Session) {
@@ -700,7 +801,7 @@ final class TrackLog {
     func write(_ line: String) {
         if handle == nil || lines > 20000 {
             try? handle?.close()
-            let head = "time,camera,eye_x,err_x,err_y,picture_vx,person_vx,camera_vx_then,want_vx,fov_deg,pan_gain,pan_sent,tilt_sent,edge_urgency,panning,box_min_x,box_max_x\n"
+            let head = "time,camera,eye_x,err_x,err_y,picture_vx,person_vx,camera_vx_then,want_vx,fov_deg,pan_gain,pan_sent,tilt_sent,edge_urgency,panning,box_min_x,box_max_x,body_turn,shoulder_share,walk_sure\n"
             FileManager.default.createFile(atPath: url.path, contents: Data(head.utf8))
             handle = try? FileHandle(forWritingTo: url)
             handle?.seekToEndOfFile()
