@@ -280,6 +280,51 @@ final class VirtualOutputTests: XCTestCase {
         XCTAssertEqual(pixel(b, 0.25, 0.25).0, 255)
         XCTAssertEqual(pixel(b, 0.75, 0.75).1, 255)
     }
+
+    /// A 4K frame as capture now delivers it (4:2:0 video range, Rec. 709): red top half, blue bottom half.
+    func redOverBlue420(_ w: Int = 3840, _ h: Int = 2160) -> CVPixelBuffer {
+        var buf: CVPixelBuffer?
+        CVPixelBufferCreate(nil, w, h, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buf)
+        let b = buf!
+        CVBufferSetAttachment(b, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
+        CVPixelBufferLockBaseAddress(b, [])
+        // Rec. 709 video range: red is Y 63, Cb 102, Cr 240; blue is Y 32, Cb 240, Cr 118.
+        let luma = CVPixelBufferGetBaseAddressOfPlane(b, 0)!.assumingMemoryBound(to: UInt8.self)
+        let ls = CVPixelBufferGetBytesPerRowOfPlane(b, 0)
+        for y in 0..<h { memset(luma + y * ls, y < h / 2 ? 63 : 32, w) }
+        let chroma = CVPixelBufferGetBaseAddressOfPlane(b, 1)!.assumingMemoryBound(to: UInt8.self)
+        let cs = CVPixelBufferGetBytesPerRowOfPlane(b, 1)
+        for y in 0..<(h / 2) {
+            let (cb, cr): (UInt8, UInt8) = y < h / 4 ? (102, 240) : (240, 118)
+            for x in 0..<(w / 2) { chroma[y * cs + x * 2] = cb; chroma[y * cs + x * 2 + 1] = cr }
+        }
+        CVPixelBufferUnlockBaseAddress(b, [])
+        return b
+    }
+
+    /// Capture frames are 4:2:0 YUV, not BGRA: they still come out in the right colours, the right way up.
+    func testAYUVCaptureFrameComesOutInItsColours() {
+        let out = VirtualOutput(name: "test", size: .p1080)
+        let frame = redOverBlue420()
+        for (crop, color) in [(CropRect(x: 0.1, y: 0.05, w: 0.4, h: 0.4), (255, 0, 0)),
+                              (CropRect(x: 0.5, y: 0.55, w: 0.4, h: 0.4), (0, 0, 255))] {
+            guard let b = out.compose(frame, crop) else { return XCTFail("nothing rendered for \(crop)") }
+            for (fx, fy) in [(0.1, 0.1), (0.5, 0.5), (0.9, 0.9)] {
+                let p = pixel(b, fx, fy)
+                XCTAssertEqual(p.0, color.0, accuracy: 6, "red at \(fx),\(fy) for \(crop)")
+                XCTAssertEqual(p.1, color.1, accuracy: 6, "green at \(fx),\(fy) for \(crop)")
+                XCTAssertEqual(p.2, color.2, accuracy: 6, "blue at \(fx),\(fy) for \(crop)")
+            }
+        }
+    }
+
+    /// The detection and preview thumbnails read a YUV capture frame too.
+    func testAYUVCaptureFrameMakesAThumbnail() {
+        guard let t = FrameTools.thumbnail(redOverBlue420(), width: VirtualCameraRuntime.detectionWidth) else { return XCTFail("no thumbnail") }
+        XCTAssertEqual(t.width, 960)
+        XCTAssertEqual(t.height, 540)
+    }
 }
 
 /// Saving a shot, renaming or reframing must never reopen the capture or the NDI output, which may be on air.

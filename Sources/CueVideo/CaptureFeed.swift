@@ -203,8 +203,9 @@ final class CaptureFeed: NSObject, ObservableObject, VideoInput, AVCaptureVideoD
             return
         }
         let output = AVCaptureVideoDataOutput()
-        // BGRA is what Core Image crops and NDI sends; the device's own format is converted for us.
-        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        // 4:2:0 video range, what capture devices deliver: Core Image (crop, thumbnails) reads it
+        // directly, so a 4K frame isn't converted to BGRA on the CPU before most of it is cropped away.
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
         // Late frames are dropped, never queued: a virtual camera is always as live as it can be.
         output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(self, queue: frames)
