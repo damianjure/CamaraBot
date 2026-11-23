@@ -32,6 +32,7 @@ final class VirtualOutput: @unchecked Sendable {
     private var sentCount = 0, droppedCount = 0
     private var lastSent = Date.distantPast
     private var runtimeMissing = false
+    private var composeMs = 0.0, sendMs = 0.0
     /// Once closed it never sends again: a frame still in flight must not reopen the NDI source.
     private var closed = false
 
@@ -48,11 +49,13 @@ final class VirtualOutput: @unchecked Sendable {
         var live = false
         /// The NDI runtime couldn't be loaded (NDI Tools isn't installed).
         var runtimeMissing = false
+        /// Smoothed milliseconds to crop+scale(+convert) a frame, and to hand it to NDI; 0 until measured.
+        var composeMs = 0.0, sendMs = 0.0
     }
 
     var stats: Stats {
         lock.lock(); defer { lock.unlock() }
-        return Stats(sent: sentCount, dropped: droppedCount, live: Date().timeIntervalSince(lastSent) < 1, runtimeMissing: runtimeMissing)
+        return Stats(sent: sentCount, dropped: droppedCount, live: Date().timeIntervalSince(lastSent) < 1, runtimeMissing: runtimeMissing, composeMs: composeMs, sendMs: sendMs)
     }
 
     /// Crop, scale and send this frame. Returns at once. `fps` is the input's rate as a fraction.
@@ -132,13 +135,25 @@ final class VirtualOutput: @unchecked Sendable {
     }
 
     private func render(_ frame: CVPixelBuffer, _ crop: CropRect, _ fps: (n: Int32, d: Int32)) {
+        let t0 = DispatchTime.now().uptimeNanoseconds
         guard let sender = openSender(), let out = compose(frame, crop) else { return }
+        let t1 = DispatchTime.now().uptimeNanoseconds
         CVPixelBufferLockBaseAddress(out, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(out, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(out) else { return }
         ndi_send_frame_format(sender, base.assumingMemoryBound(to: UInt8.self), Int32(size.width), Int32(size.height),
                               Int32(CVPixelBufferGetBytesPerRow(out)), fps.n, fps.d, uyvy ? 1 : 0)
-        lock.lock(); sentCount += 1; lastSent = Date(); lock.unlock()
+        let t2 = DispatchTime.now().uptimeNanoseconds
+        lock.lock()
+        sentCount += 1; lastSent = Date()
+        composeMs = Self.smoothed(composeMs, Double(t1 - t0) / 1e6)
+        sendMs = Self.smoothed(sendMs, Double(t2 - t1) / 1e6)
+        lock.unlock()
+    }
+
+    /// A running average that settles in about twenty samples; the first sample is taken as it is.
+    static func smoothed(_ average: Double, _ sample: Double) -> Double {
+        average == 0 ? sample : average * 0.95 + sample * 0.05
     }
 
     /// The picture to send: `crop` of the captured frame, scaled to the output size. Apart from

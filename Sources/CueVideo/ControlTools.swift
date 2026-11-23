@@ -183,6 +183,9 @@ enum ControlTools {
                                         "frames_sent": t.sent, "frames_dropped": t.dropped, "mode": t.mode, "shot": t.shot, "following": t.phase,
                                         "zoom_limit": t.zoomLimited, "starts_as": r.camera.startMode.rawValue, "ndi_groups": r.camera.ndiGroups ?? "public",
                                         "crop": ["x": t.crop.x, "y": t.crop.y, "w": t.crop.w, "h": t.crop.h]]
+                let ms = { (v: Double) -> Any in v == 0 ? NSNull() : (v * 10).rounded() / 10 }
+                o["frame_ms"] = ms(t.frameMs); o["detect_ms"] = ms(t.detectMs); o["capture_thread_ms"] = ms(t.captureMs)
+                o["thumbnail_ms"] = ms(t.thumbMs); o["compose_ms"] = ms(t.composeMs); o["send_ms"] = ms(t.sendMs)
                 if let z = t.maxZoom { o["max_zoom"] = z }
                 if let p = t.problem { o["problem"] = p }
                 if t.runtimeMissing { o["problem"] = "NDI isn't installed on this Mac. Install NDI Tools." }

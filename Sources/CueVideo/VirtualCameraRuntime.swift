@@ -46,6 +46,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
     // Smoothed milliseconds spent on a frame (crop and send) and on a detection, for Status.
     private var frameMs = 0.0
     private var detectMs = 0.0
+    private var captureMs = 0.0, thumbMs = 0.0
     private var seen: (people: [CGRect], followed: CGRect?, at: Date) = ([], nil, .distantPast)
 
     /// How many times something has steered it (an operator, the network, vMix): changes whenever one does.
@@ -229,6 +230,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         /// Milliseconds to crop and send one frame, and to find the people in one; 0 until measured.
         var frameMs = 0.0
         var detectMs = 0.0
+        /// Instrumentation: ms on the shared capture thread per frame (whole handler), of which the detection thumbnail; and the render queue's compose and NDI-send ms.
+        var captureMs = 0.0, thumbMs = 0.0, composeMs = 0.0, sendMs = 0.0
     }
 
     /// Cameras on one device share a single capture, opened with the first camera's format. Say so
@@ -247,13 +250,14 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         switch mode { case .follow: m = "follow"; case .hold: m = "hold"; case .wide: m = "wide"; case .shot: m = "shot" }
         let phase = follow.phase.rawValue, limited = follow.zoomLimited, zoom = geometry == nil ? nil : follow.planner.maxZoom
         let shot = self.shot.rawValue
-        let (frameMs, detectMs) = (self.frameMs, self.detectMs)
+        let (frameMs, detectMs, captureMs, thumbMs) = (self.frameMs, self.detectMs, self.captureMs, self.thumbMs)
         let recent = dropWindow.add(now: Date(), sent: o.sent, dropped: o.dropped)
         lock.unlock()
         return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: blocked == nil && feed.live, problem: blocked ?? feed.problem ?? sharedFormatNote,
                       outputLive: o.live, sent: o.sent, dropped: o.dropped, recentSent: recent.sent, recentDropped: recent.dropped,
                       runtimeMissing: o.runtimeMissing,
-                      mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal, frameMs: frameMs, detectMs: detectMs)
+                      mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal, frameMs: o.composeMs + o.sendMs, detectMs: detectMs,
+                      captureMs: captureMs, thumbMs: thumbMs, composeMs: o.composeMs, sendMs: o.sendMs)
     }
 
     // MARK: Frames (capture thread)
@@ -268,6 +272,8 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         lock.lock(); frameMs = Self.smoothed(frameMs, spent); lock.unlock()
         detectIfDue(pixels)
         previewIfWanted(pixels)
+        let total = Double(DispatchTime.now().uptimeNanoseconds - began) / 1e6
+        lock.lock(); captureMs = Self.smoothed(captureMs, total); lock.unlock()
     }
 
     // MARK: Preview (for the operator panel)
@@ -331,10 +337,13 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         lastDetect = now
         lock.unlock()
         // The small copy is made here, so the capture buffer goes back to the device at once.
+        let tb = DispatchTime.now().uptimeNanoseconds
         guard let small = FrameTools.thumbnail(pixels, width: Self.detectionWidth) else {
             lock.lock(); detecting = false; lock.unlock()
             return
         }
+        let tms = Double(DispatchTime.now().uptimeNanoseconds - tb) / 1e6
+        lock.lock(); thumbMs = Self.smoothed(thumbMs, tms); lock.unlock()
         vision.async { [weak self] in
             let began = DispatchTime.now().uptimeNanoseconds
             let people = AutoTracker.detect(small)
