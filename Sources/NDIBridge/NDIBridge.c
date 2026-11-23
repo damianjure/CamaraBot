@@ -151,7 +151,9 @@ void *ndi_send_open(const char *name) { return ndi_send_open_groups(name, NULL);
 
 void *ndi_send_open_groups(const char *name, const char *groups) {
     if (!ndi_load() || !f_send_create) return NULL;
-    send_create_t sc = { name, (groups && groups[0]) ? groups : NULL, true, false };
+    // Not clocked: frames come from a live capture that already sets the pace. A clocked sender
+    // blocks each send until its next slot (up to a whole frame), which made rendering fall behind.
+    send_create_t sc = { name, (groups && groups[0]) ? groups : NULL, false, false };
     return f_send_create(&sc);
 }
 
