@@ -231,6 +231,14 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         var detectMs = 0.0
     }
 
+    /// Cameras on one device share a single capture, opened with the first camera's format. Say so
+    /// when this camera asks for another one, instead of silently ignoring it.
+    private var sharedFormatNote: String? {
+        guard let want = camera.inputFormat, let cf = feed as? CaptureFeed, cf.live, want != cf.preferred else { return nil }
+        return tr("Shares its capture with another camera, so that one's input format applies, not \(want).",
+                  es: "Comparte la captura con otra cámara, así que rige el formato de esa, no \(want).")
+    }
+
     /// Read from the main thread: it touches the feed's published values.
     func status() -> Status {
         let o = output.stats
@@ -242,7 +250,7 @@ final class VirtualCameraRuntime: @unchecked Sendable {
         let (frameMs, detectMs) = (self.frameMs, self.detectMs)
         let recent = dropWindow.add(now: Date(), sent: o.sent, dropped: o.dropped)
         lock.unlock()
-        return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: blocked == nil && feed.live, problem: blocked ?? feed.problem,
+        return Status(name: camera.name, ndiName: camera.ndiName, input: feed.shape, captureLive: blocked == nil && feed.live, problem: blocked ?? feed.problem ?? sharedFormatNote,
                       outputLive: o.live, sent: o.sent, dropped: o.dropped, recentSent: recent.sent, recentDropped: recent.dropped,
                       runtimeMissing: o.runtimeMissing,
                       mode: m, shot: shot, phase: mode == .follow ? phase : "-", zoomLimited: limited, maxZoom: zoom, crop: motion.currentGoal, frameMs: frameMs, detectMs: detectMs)
