@@ -20,6 +20,9 @@ final class VirtualOutput: @unchecked Sendable {
     private let queue = DispatchQueue(label: "cuevideo.virtual.output", qos: .userInteractive)
     private let lock = NSLock()
     private var busy = false
+    private struct Job { var frame: CVPixelBuffer; var crop: CropRect; var fps: (n: Int32, d: Int32) }
+    /// The frame waiting for the one being rendered, if any.
+    private var pending: Job?
     private var sender: UnsafeMutableRawPointer?
     private var pool: CVPixelBufferPool?
     // UYVY only: the picture is composed as BGRA, then converted (Core Image, set up for untouched video, won't write YUV).
@@ -53,19 +56,35 @@ final class VirtualOutput: @unchecked Sendable {
     }
 
     /// Crop, scale and send this frame. Returns at once. `fps` is the input's rate as a fraction.
+    /// One frame may wait while another renders, so a burst of two (common over wifi) isn't
+    /// lost; a third arriving before the first is picked up replaces the waiting one, which is
+    /// dropped. Never more than one frame of delay, never a growing queue.
     func submit(_ frame: CVPixelBuffer, crop: CropRect, fps: (n: Int32, d: Int32)) {
         lock.lock()
-        if busy { droppedCount += 1; lock.unlock(); return }
+        if busy {
+            if pending != nil { droppedCount += 1 }
+            pending = Job(frame: frame, crop: crop, fps: fps)
+            lock.unlock()
+            return
+        }
         busy = true
         lock.unlock()
         queue.async { [self] in
-            render(frame, crop, fps)
-            lock.lock(); busy = false; lock.unlock()
+            var job = Job(frame: frame, crop: crop, fps: fps)
+            while true {
+                render(job.frame, job.crop, job.fps)
+                lock.lock()
+                if let next = pending { pending = nil; job = next; lock.unlock(); continue }
+                busy = false
+                lock.unlock()
+                break
+            }
         }
     }
 
     /// Closes the NDI sender once whatever is rendering has finished.
     func close() {
+        lock.lock(); pending = nil; lock.unlock()
         queue.async { [self] in
             closed = true
             if let s = sender { ndi_send_close(s); sender = nil }
