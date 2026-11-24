@@ -175,7 +175,8 @@ enum ControlTools {
             done(ok("Config updated", ["config": try configObject()]))
         case "list_capture_devices":
             done(["devices": CaptureFeed.devices().map { ["id": $0.id, "name": $0.name, "formats": $0.formats] as [String: Any] },
-                  "note": "Use an id as the device of a virtual camera in update_config. If a device lists only 1080p, that is all macOS gets over USB."])
+                  "video_effects": CaptureFeed.videoEffects(),
+                  "note": "Use an id as the device of a virtual camera in update_config. If a device lists only 1080p, that is all macOS gets over USB. video_effects are macOS's own (Control Center > Video Effects): each one on costs CPU on every frame."])
         case "list_virtual_cameras":
             done(["virtualCameras": VirtualCameras.shared.all.map { r -> [String: Any] in
                 let t = r.status()

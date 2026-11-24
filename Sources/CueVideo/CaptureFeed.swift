@@ -108,6 +108,18 @@ final class CaptureFeed: NSObject, ObservableObject, VideoInput, AVCaptureVideoD
         AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .video, position: .unspecified)
     }
 
+    /// macOS video effects as the user set them for this app (Control Center > Video Effects).
+    /// Read only: an app can't switch them, and they run their own detection on every frame.
+    static func videoEffects() -> [String: Any] {
+        var e: [String: Any] = ["reactions": AVCaptureDevice.reactionEffectsEnabled,
+                                "reaction_gestures": AVCaptureDevice.reactionEffectGesturesEnabled,
+                                "portrait": AVCaptureDevice.isPortraitEffectEnabled,
+                                "studio_light": AVCaptureDevice.isStudioLightEnabled,
+                                "center_stage": AVCaptureDevice.isCenterStageEnabled]
+        if #available(macOS 26.2, *) { e["edge_light"] = AVCaptureDevice.isEdgeLightEnabled; e["edge_light_active"] = AVCaptureDevice.isEdgeLightActive }
+        return e
+    }
+
     /// The ID to open: the saved one when that device is there, else the one device with the saved
     /// name. A USB capture device's ID follows the port it is plugged into, so a different port
     /// gives a new ID; two devices with the same name can't be told apart, so none is guessed.
